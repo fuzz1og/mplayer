@@ -112,4 +112,24 @@
 并直接 `spawnSync(process.execPath, [...])` 绕开 shell（cmd.exe 与 CreateProcess 两条上限都碰不到）。
 边界不变：pre-commit 仍是本地加速而非闸门，闸门是 CI 的必需状态检查。
 
+## 更新（2026-10-29，#717）：门禁自己也要有入口；expo 漂移自分类；Windows 分片
 
+决策 1（验证只有一个入口）不变。static 新增三步，都写在 `verify.mjs` 里：**门禁登记**（`gate-registry.mjs`）、
+**版本一致性**（`npm run version:check`）、**页面测试覆盖**（`page-coverage.mjs`）。
+
+- **门禁登记**是给「假门禁」这类事故收网的：它要求 scripts/ 下门禁形态的脚本、以及 package.json 里门禁形态的命令，
+  必须出现在 verify / pre-commit / 某个 workflow 里，否则红。落地时它抓到的唯一现行样本就是 `version:check`——
+  该命令（`version-bump.js --check`，检查 7 处版本号一致）写好之后从未被任何入口调用。**它抓不住 #557 那类
+  步骤级漏接**（core typecheck 不是脚本，靠后面的人读 verify.mjs 才补上的），这条边界要记住。
+- **页面测试覆盖**把「新页面必须带测试」变成机械规则：路由里 16 个懒加载页面目前 15 个有测试引用，
+  开发用的 `UiLabPage` 在脚本 ALLOW 里登记理由；组件层暂不纳入（54 个组件里 20 个没有按名字引用，噪声太大）。
+- **expo 分片改为失败自分类**：本改动没碰 `package.json` / `package-lock.json` / `app.json` 时，判为上游漂移
+  （Expo 发新期望补丁，见 ADR `2026-09-29-dependency-update-governance`），出 warning 不拦；碰了依赖文件、
+  取不到 `origin/master...HEAD` 的 diff、或 master 自身运行（diff 为空）都照旧红。**这不是放松 #478 那张网**：
+  依赖类改动照旧被拦，只是把「与本改动无关的红」从人肉证伪改成门禁自述。**否决**把它设为必需检查——
+  那等于把上游节奏变成合入阻塞。
+- **CI 增加 `windows-static` 分片**（`windows-latest` 跑 `npm run verify -- static`）：验的是验证入口本身在
+  维护者平台成立。#500（WSL 的 bash 解析到 Linux node）与 #654（Windows 命令行上限）两起事故都只存在于这条路径，
+  ubuntu 分片永远看不见。**先不进 ruleset**：必需检查仍是 `check` + 四个 `test`，Windows 分片观察一段时间再说。
+- 同批把 `comment-gate` 与 `claim-lint`（各 <200ms）前移到 `.githooks/pre-commit`：它们在近三天的会话里
+  分别命中 54 次 / 39 次量级，成本是「改完才发现」的返工，不是缺门禁。边界仍是第 113 行那条——pre-commit 不是闸门。

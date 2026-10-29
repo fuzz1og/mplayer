@@ -321,8 +321,25 @@ MOBILE_FRAME_PARSE_DIR=e2e/artifacts/frame-idle-20260929-120000 scripts/mobile-f
 
 ⚠ 两个限制：**（1）** 本 App 的拖拽跟手跑在 JS 线程，JS 卡住时面板是「冻住」而不是「画得慢」——UI 线程根本没被要求出新帧，帧统计可能反而很健康，所以本脚本的输出**不能单独定罪**，必须与 App 侧 `[drag]` 日志（`services/dragJankProbe`）合看；**（2）** `adb shell input swipe` 是 120Hz 线性 MOVE 流，有真实事件密度但没有真实手指速度曲线，A/B 两臂用同一种注入即可自洽。协议与判据见 `docs/research/2026-09-29-mobile-drag-jank-protocol.md`。
 
+## 桌面截图证据脚本（`shots-*`）
+
+UI 验收的截图 / 几何 / 无障碍证据用 `e2e/shots-*.mjs` 跑真实 Electron，**不进 CI**。产物落 `e2e/artifacts/shots/<脚本名>/`（gitignore）；验收图按 `AGENTS.md` 传 PR 正文或评论，不入库。
+
+```bash
+npm run build              # 脚本吃 dist/ 与 dist-electron/main.js
+npx install-electron       # 首次需要（Electron 42 起没有 postinstall）
+node e2e/shots-strip.mjs   # 一级页面页头与首行落点
+node e2e/shots-ia.mjs      # #694 信息架构：2 分组 / 4 库页 / 3 段，× 1024·1280 × 浅·深
+node e2e/shots-cards.mjs   # 封面卡尺寸 + 歌单悬浮操作
+node e2e/shots-detail.mjs  # 四个详情页几何（hero / 工具栏 / 行高 / 主 CTA）
+node e2e/shots-filter.mjs  # 歌单详情过滤四态
+```
+
+五个脚本共用 `e2e/lib/shots.mjs`：起 Electron、清 `ELECTRON_RUN_AS_NODE`、`go(hash)` 跳路由、`shot(label, probe)` 截图并打印探针、`finish(failures)` 落 `report.json`、汇页面异常，断言失败即退出码 1。**新增走查一律基于它**，不要再各抄一份启动样板。
+
 ## 相关文件
 
+- `e2e/lib/shots.mjs` - `shots-*` 共用的真实 Electron 截图 / 断言驱动
 - `e2e/electron-e2e.spec.ts` 等 `*.spec.ts` - 桌面端 Playwright 测试场景
 - `scripts/mobile-frame-stats.mjs` - 移动端帧计时取证（性能，adb 驱动）
 - `scripts/mobile-ui.mjs` - uiautomator dump 的取树 / 查节点 / 点按（`dump` / `find` / `tap`，adb 驱动）

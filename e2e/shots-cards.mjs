@@ -1,54 +1,33 @@
-import { _electron as electron } from '@playwright/test';
-import fs from 'node:fs';
-import path from 'node:path';
+import { openShots, settle } from './lib/shots.mjs';
 
-const WORKTREE = path.resolve(import.meta.dirname, '..');
-const OUT = 'D:/Playground/_mplayer-agent/shots-cards';
-const USER_DATA = path.join(OUT, 'user-data');
+/** 卡片与歌单证据：封面卡尺寸、歌单增删悬浮操作、收藏页歌手分段（产物在 e2e/artifacts/shots/cards）。 */
 
-fs.mkdirSync(OUT, { recursive: true });
-fs.rmSync(USER_DATA, { recursive: true, force: true });
-
-const env = { ...process.env };
-delete env.ELECTRON_RUN_AS_NODE;
-const settle = (page, ms) => page.waitForTimeout(ms);
-
-const app = await electron.launch({
-  args: ['--no-sandbox', '--force-device-scale-factor=1', '--user-data-dir=' + USER_DATA, '.'],
-  cwd: WORKTREE,
-  env,
-  timeout: 60000,
+const cardProbe = (page) => page.evaluate(() => {
+  const first = document.querySelector('.cover-card');
+  const box = first ? first.getBoundingClientRect() : null;
+  return {
+    cards: document.querySelectorAll('.cover-card').length,
+    w: box ? Math.round(box.width) : null,
+    h: box ? Math.round(box.height) : null,
+    first: document.querySelector('.cover-card__title')?.textContent ?? null,
+  };
 });
-const page = await app.firstWindow();
-page.on('pageerror', (e) => console.log('[pageerror] ' + e));
-await page.waitForLoadState('domcontentloaded');
-await settle(page, 2500);
 
-const go = async (hash, ms) => {
-  await page.evaluate((h) => { location.hash = h; }, hash);
-  await settle(page, ms);
-};
+const shots = await openShots('cards');
+const { page } = shots;
 
-const shot = async (name) => {
-  await page.screenshot({ path: path.join(OUT, name + '.png') });
-  const cards = await page.locator('.cover-card').count();
-  const box = await page.locator('.cover-card').first().boundingBox().catch(() => null);
-  const title = await page.locator('.cover-card__title').first().textContent().catch(() => null);
-  console.log('[shot] ' + name + ' cards=' + cards + ' w=' + (box ? Math.round(box.width) : '?') + ' h=' + (box ? Math.round(box.height) : '?') + ' first=' + title);
-};
+await shots.go('#/recommend', 3500);
+await shots.shot('1-recommend-playlists', cardProbe);
 
-await go('#/recommend', 3500);
-await shot('1-recommend-playlists');
-
-await go('#/discover', 1500);
+await shots.go('#/discover', 1500);
 const tab = (name) => page.locator('.discover-segment', { hasText: name }).first();
 await tab('歌单').click();
 await settle(page, 4500);
-await shot('2-discover-playlists');
+await shots.shot('2-discover-playlists', cardProbe);
 
 await tab('歌手').click();
 await settle(page, 6000);
-await shot('3-artist-list');
+await shots.shot('3-artist-list', cardProbe);
 
 const input = page.locator('input[placeholder="搜索歌曲、专辑、歌手"]').first();
 await input.click();
@@ -57,9 +36,9 @@ await input.press('Enter');
 await settle(page, 3500);
 await page.locator('.discover-pill--tab', { hasText: '歌手' }).first().click();
 await settle(page, 4500);
-await shot('4-search-artists');
+await shots.shot('4-search-artists', cardProbe);
 
-await go('#/playlists', 2000);
+await shots.go('#/playlists', 2000);
 for (const name of ['深夜通勤', '雨天读书']) {
   await page.getByRole('button', { name: '新建歌单' }).click();
   await settle(page, 400);
@@ -67,18 +46,18 @@ for (const name of ['深夜通勤', '雨天读书']) {
   await page.getByRole('button', { name: '创建' }).click();
   await settle(page, 700);
 }
-await shot('5-my-playlists');
+await shots.shot('5-my-playlists', cardProbe);
 await page.locator('.cover-card').first().hover();
 await settle(page, 400);
-await shot('6-my-playlists-hover-delete');
-const delVisible = await page.locator('.cover-card__action > button').first().isVisible();
-const delLabel = await page.locator('.cover-card__action > button').first().getAttribute('aria-label');
-console.log('[action] visible=' + delVisible + ' label=' + delLabel);
+await shots.shot('6-my-playlists-hover-delete', cardProbe);
 
-await go('#/favorites', 2500);
-await page.locator('.ui-segmented__option', { hasText: '歌手' }).first().click().catch(async () => { await page.getByText('歌手', { exact: true }).last().click(); });
+const action = page.locator('.cover-card__action > button').first();
+console.log('[action] visible=' + await action.isVisible() + ' label=' + await action.getAttribute('aria-label'));
+
+await shots.go('#/favorites', 2500);
+await page.locator('.ui-segmented__option', { hasText: '歌手' }).first().click()
+  .catch(async () => { await page.getByText('歌手', { exact: true }).last().click(); });
 await settle(page, 1500);
-await shot('7-library-artists');
+await shots.shot('7-library-artists', cardProbe);
 
-await app.close();
-console.log('DONE ' + OUT);
+await shots.finish();

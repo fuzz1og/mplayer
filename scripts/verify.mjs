@@ -22,6 +22,11 @@ const SCOPE = process.argv[2] ?? 'all';
  */
 function runStep(label, commandLine, options = {}) {
   console.log(`→ ${label}...`);
+  const fail = (message) => {
+    console.error(message);
+    if (options.exitOnFail === false) return false; // 交给调用方分类（expo 上游漂移，见 classifyExpoFailure）
+    process.exit(1);
+  };
   const [file, args] = process.platform === 'win32'
     ? ['cmd.exe', ['/d', '/s', '/c', commandLine]]
     : ['sh', ['-c', commandLine]];
@@ -30,15 +35,12 @@ function runStep(label, commandLine, options = {}) {
     cwd: options.cwd ?? ROOT,
     env: { ...process.env, ...(options.env ?? {}) },
   });
-  if (res.error) {
-    console.error(`✗ ${label} 起不来: ${res.error.message}`);
-    process.exit(1);
-  }
+  if (res.error) return fail(`✗ ${label} 起不来: ${res.error.message}`);
   if (res.status !== 0) {
     const how = res.status === null ? `signal ${res.signal}` : `exit ${res.status}`;
-    console.error(`✗ ${label} 失败（${how}）`);
-    process.exit(res.status ?? 1);
+    return fail(`✗ ${label} 失败（${how}）`);
   }
+  return true;
 }
 
 /**
@@ -90,6 +92,11 @@ const SHARDS = {
     // 字号字重圆角字面量四条硬规则，无存量白名单——清到 0 之后才接线，防止回潮。
     ['design-lint', 'node scripts/design-lint.mjs --desktop-strict'],
     ['claim-lint', 'node scripts/claim-lint.mjs'],
+    // #717：门禁登记——门禁脚本 / npm 门禁命令必须被某个入口调用，防「脚本在仓库里但没人跑」的假门禁（#654）
+    ['门禁登记', 'node scripts/gate-registry.mjs'],
+    ['版本一致性', 'npm run version:check'],
+    // #717：页面测试覆盖——路由新增的懒加载页面必须带测试
+    ['页面测试覆盖', 'node scripts/page-coverage.mjs'],
     ['root typecheck', 'npm run typecheck'],
     ['mobile typecheck', 'npm run typecheck:mobile'],
     ['build', 'npm run build'],
@@ -111,7 +118,7 @@ const SHARDS = {
   ],
   expo: [
     ['Expo SDK 依赖一致性（expo install --check）', 'npx expo install --check',
-      { cwd: path.join(ROOT, 'packages/mobile'), env: { CI: '1' } }],
+      { cwd: path.join(ROOT, 'packages/mobile'), env: { CI: '1' }, upstreamDrift: true }],
   ],
 };
 
@@ -248,6 +255,31 @@ function reportBranchBase() {
   ].join('\n'));
 }
 
+/**
+ * expo 分片失败时的自分类（#717）：上游发新期望补丁会让它独立变红（ADR 2026-09-29-dependency-update-governance）。
+ * 只看「本改动有没有碰依赖文件」：没碰 = 上游漂移，出 warning 不拦；碰了、取不到 diff、或 master 自身运行，照旧拦。
+ */
+const DEPENDENCY_FILES = /(^|\/)(package\.json|package-lock\.json|app\.json)$/;
+
+function classifyExpoFailure() {
+  const git = (args) => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
+  const committed = git(['diff', '--name-only', 'origin/master...HEAD']);
+  if (committed.status !== 0) {
+    const why = (committed.stderr ?? '').trim().split('\n')[0] || 'git diff 失败';
+    return { drift: false, why: '取不到 origin/master...HEAD 的 diff：' + why + '（先 git fetch origin master）' };
+  }
+  // 未提交的改动（含暂存）也算：本地还没 commit 时只看已提交的一半，会误判成「master 自身运行」
+  const pending = git(['diff', '--name-only', 'HEAD']);
+  const files = [...new Set([
+    ...(committed.stdout ?? '').split('\n'),
+    ...(pending.stdout ?? '').split('\n'),
+  ].map((s) => s.trim()).filter(Boolean))];
+  if (files.length === 0) return { drift: false, why: 'HEAD 与 origin/master 无差异且工作树干净（master 自身运行），保留红灯' };
+  const deps = files.filter((file) => DEPENDENCY_FILES.test(file));
+  if (deps.length > 0) return { drift: false, why: '本改动触及依赖文件：' + deps.slice(0, 5).join(', ') };
+  return { drift: true, why: '本改动未触及任何依赖文件（改动 ' + files.length + ' 个文件），判定为上游漂移' };
+}
+
 const SCOPES = {
   all: ['static', 'renderer', 'main', 'core', 'mobile', 'expo'],
   static: ['static'],
@@ -273,7 +305,23 @@ reportBranchBase();
 
 for (const shard of SCOPES[SCOPE]) {
   for (const [label, commandLine, options] of SHARDS[shard]) {
-    runStep(label, commandLine, options);
+    const ok = runStep(label, commandLine, { ...options, exitOnFail: !options?.upstreamDrift });
+    if (!ok) {
+      // 只有标了 upstreamDrift 的步骤会走到这里（其余步骤 runStep 已 exit）
+      const verdict = classifyExpoFailure();
+      if (verdict.drift) {
+        console.warn([
+          '',
+          '⚠ ' + label + ' 未通过，但判定为上游漂移，不拦本次验证：' + verdict.why,
+          '  处置：与本改动无关时照常提交（这是 ADR 2026-09-29-dependency-update-governance 记过的固有不稳定源）；',
+          '        要修就单独一票跑 npx expo install --fix，别混进本 PR。',
+          '',
+        ].join('\n'));
+        continue;
+      }
+      console.error('✗ ' + label + ' 失败，且不是上游漂移：' + verdict.why);
+      process.exit(1);
+    }
     // 构建后立刻自证：消费者解析到的那份 dist 就是刚构建的这份（#521 的 junction 陷阱）
     if (label === 'core:build') assertCoreIsFromThisCheckout({ requireDist: true });
   }

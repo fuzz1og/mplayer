@@ -70,4 +70,22 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
+      # expo 分片的失败自分类要拿 origin/master...HEAD 的 diff（没碰依赖文件即判上游漂移）
+      - run: git fetch --no-tags --depth=1 origin +refs/heads/master:refs/remotes/origin/master
       - run: ./scripts/verify.sh expo
+
+  # Windows 分片：验证入口本身在维护者平台（Windows）上成立。#500（WSL 的 bash 解析到 Linux node）
+  # 与 #654（提交 330 个文件撞 Windows 命令行上限）两起事故都只在这条路径上出现，ubuntu 分片永远看不见。
+  # 不进 ruleset 必需检查：先观察误报率，稳定后再议（ADR 2026-09-29-ci-verification-boundary）。
+  windows-static:
+    runs-on: windows-latest
+    timeout-minutes: 25
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci --ignore-scripts
+      # 走 npm run verify（不是 ./scripts/verify.sh）：Windows 上 shim 依赖 bash，这里验的就是 Node 入口
+      - run: npm run verify -- static
