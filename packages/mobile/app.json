@@ -2,7 +2,7 @@
   "expo": {
     "name": "MPlayer",
     "slug": "mplayer-mobile",
-    "version": "1.9.0",
+    "version": "1.9.1",
     "orientation": "portrait",
     "scheme": "mplayer",
     "userInterfaceStyle": "automatic",
@@ -14,7 +14,7 @@
     "icon": "../../resources/icon.png",
     "android": {
       "package": "com.mplayer.mobile",
-      "versionCode": 31,
+      "versionCode": 32,
       "adaptiveIcon": {
         "foregroundImage": "../../resources/icon-foreground.png",
         "backgroundColor": "#2F5FD0"
