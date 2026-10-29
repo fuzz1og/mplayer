@@ -23,8 +23,14 @@ export interface PlaybackClock {
   connect(samplePosition: () => number): void;
   /** 订阅快照变化，返回解绑函数 */
   subscribe(listener: () => void): () => void;
+  /** 订阅播放/暂停切换（快照语义不变：位置照旧 250ms 采样，只有播放态通知） */
+  subscribePlaying(listener: () => void): () => void;
   /** 当前快照；未变化时保持同一对象引用（useSyncExternalStore 依赖此约定） */
   getSnapshot(): PlaybackSnapshot;
+  /** 是否正在播放：暂停时 false（不随 tick 抖动） */
+  isPlaying(): boolean;
+  /** 按最近一次采样插值出的当前位置（秒）：暂停 / seek 挂起时等于快照位置 */
+  getPositionNow(): number;
   /** 播放/暂停切换：暂停冻结采样，快照保留最后位置 */
   setPlaying(playing: boolean): void;
   /** 立即改写位置（seek/复播）；即使暂停中也要立刻反映 */
@@ -52,7 +58,10 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   let timer: ReturnType<typeof setInterval> | null = null;
   /** seek 乐观值：到传输层采样响应（相对 seek 前位置变化）且追上 target（或超时）之前，忽略采样结果 */
   let pendingSeek: { target: number; from: number; until: number } | null = null;
+  /** 最近一次采样的墙钟时间（performance.now）：getPositionNow 从这里插值 */
+  let lastTickAt = 0;
   const listeners = new Set<() => void>();
+  const playingListeners = new Set<() => void>();
 
   // 只有真正变化才换快照对象并通知：值相同（含 undefined 之外的 NaN 比对交给 React）不打扰订阅者
   const emit = (next: Partial<PlaybackSnapshot>): void => {
@@ -83,6 +92,7 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       if (!settled) return;
       pendingSeek = null;
     }
+    lastTickAt = performance.now();
     emit({ position: sampled });
   };
 
@@ -98,16 +108,33 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       };
     },
 
+    subscribePlaying(listener) {
+      playingListeners.add(listener);
+      return () => {
+        playingListeners.delete(listener);
+      };
+    },
+
     getSnapshot: () => snapshot,
 
+    isPlaying: () => timer !== null,
+
+    getPositionNow() {
+      if (timer === null || pendingSeek !== null || lastTickAt === 0) return snapshot.position;
+      // 只插值一个采样窗口：后台被节流时不要把位置甩出去
+      const elapsedMs = Math.min(Math.max(performance.now() - lastTickAt, 0), intervalMs);
+      return snapshot.position + elapsedMs / 1000;
+    },
+
     setPlaying(playing) {
+      const wasPlaying = timer !== null;
       if (!playing) {
         stopTimer();
-        return;
+      } else if (timer === null) {
+        timer = setInterval(tick, intervalMs);
+        tick();
       }
-      if (timer !== null) return;
-      timer = setInterval(tick, intervalMs);
-      tick();
+      if (wasPlaying !== (timer !== null)) playingListeners.forEach((listener) => listener());
     },
 
     setPosition(position) {
@@ -117,6 +144,7 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       pendingSeek = position === from
         ? null
         : { target: position, from, until: Date.now() + SEEK_SETTLE_TIMEOUT_MS };
+      lastTickAt = performance.now();
       emit({ position });
     },
 
@@ -126,13 +154,16 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
 
     reset() {
       pendingSeek = null;
+      lastTickAt = performance.now();
       emit({ position: 0, duration: 0 });
     },
 
     destroy() {
       stopTimer();
       pendingSeek = null;
+      lastTickAt = 0;
       listeners.clear();
+      playingListeners.clear();
       samplePosition = () => 0;
       snapshot = { position: 0, duration: 0 };
     },
@@ -164,4 +195,9 @@ export function usePlaybackPosition(): number {
 /** 当前时长（秒） */
 export function usePlaybackDuration(): number {
   return usePlaybackSelector((snapshot) => snapshot.duration);
+}
+
+/** 是否正在播放（只读）：逐字填充的 rAF 循环靠它起停 */
+export function usePlaybackPlaying(): boolean {
+  return useSyncExternalStore(playbackClock.subscribePlaying, playbackClock.isPlaying, playbackClock.isPlaying);
 }

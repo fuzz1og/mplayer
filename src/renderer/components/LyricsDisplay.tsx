@@ -1,6 +1,6 @@
-import React, { useMemo, useRef, useEffect } from 'react';
-import { parseLRC, findCurrentLyricIndex, type ParsedLyrics } from '@mplayer/core';
-import { usePlaybackSelector } from '@/renderer/services/playbackClock';
+import React, { useEffect, useMemo, useRef } from 'react';
+import { parseLRC, findCurrentLyricIndex, type LyricWord, type ParsedLyrics } from '@mplayer/core';
+import { playbackClock, usePlaybackPlaying, usePlaybackSelector } from '@/renderer/services/playbackClock';
 import '@/renderer/styles/songlist.css';
 
 interface LyricsDisplayProps {
@@ -8,6 +8,21 @@ interface LyricsDisplayProps {
   className?: string;
   style?: React.CSSProperties;
   onLyricClick?: (time: number) => void;
+}
+
+export interface WordFill {
+  index: number;
+  progress: number;
+}
+
+/** 词内进度：当前词序号 + 该词已唱比例（0~1，词前/词后按端点夹紧）；没有逐字轨道返回 null */
+export function wordFillAt(words: LyricWord[] | undefined, position: number): WordFill | null {
+  if (!words || words.length === 0) return null;
+  const index = findCurrentLyricIndex(words, position);
+  const word = words[index < 0 ? 0 : index];
+  if (!word) return { index: 0, progress: 0 };
+  const raw = word.duration > 0 ? (position - word.time) / word.duration : (position >= word.time ? 1 : 0);
+  return { index: index < 0 ? 0 : index, progress: Math.min(1, Math.max(0, raw)) };
 }
 
 const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
@@ -18,6 +33,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLineRef = useRef<HTMLDivElement>(null);
+  const currentWordElRef = useRef<HTMLSpanElement | null>(null);
 
   const parsedLyrics: ParsedLyrics = useMemo(() => {
     if (!lrcContent) {
@@ -49,6 +65,24 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
     if (!words || words.length === 0) return -1;
     return findCurrentLyricIndex(words, currentTime);
   });
+
+  const playing = usePlaybackPlaying();
+  const activeWords = currentLineIndex >= 0 ? parsedLyrics.lines[currentLineIndex]?.words : undefined;
+
+  // 字内连续填充（#722）：只在「播放中 + 当前行有逐字轨道」时跑 rAF，每帧只给当前词写一个
+  // CSS 变量，不 setState（每帧 React 渲染会击穿行的 memo 纪律）；词边界仍由 currentWordIndex 驱动。
+  useEffect(() => {
+    if (!playing || !activeWords || activeWords.length === 0) return;
+    let frame = 0;
+    const paint = (): void => {
+      const element = currentWordElRef.current;
+      const fill = wordFillAt(activeWords, playbackClock.getPositionNow());
+      if (element && fill) element.style.setProperty('--word-fill', `${(fill.progress * 100).toFixed(2)}%`);
+      frame = requestAnimationFrame(paint);
+    };
+    frame = requestAnimationFrame(paint);
+    return () => cancelAnimationFrame(frame);
+  }, [playing, activeWords]);
 
   useEffect(() => {
     if (currentLineIndex < 0 || !activeLineRef.current || !containerRef.current) {
@@ -101,15 +135,20 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
             >
               <span className="lyrics__text">
                 {line.words && line.words.length > 0
-                  ? line.words.map((word, wordIndex) => (
-                      <span
-                        key={wordIndex}
-                        className="lyrics__word"
-                        data-sung={(isActive && wordIndex <= currentWordIndex) || undefined}
-                      >
-                        {word.text}
-                      </span>
-                    ))
+                  ? line.words.map((word, wordIndex) => {
+                      const isCurrentWord = isActive && wordIndex === currentWordIndex;
+                      return (
+                        <span
+                          key={wordIndex}
+                          ref={isCurrentWord ? currentWordElRef : null}
+                          className="lyrics__word"
+                          data-sung={(isActive && wordIndex <= currentWordIndex) || undefined}
+                          data-current-word={isCurrentWord || undefined}
+                        >
+                          {word.text}
+                        </span>
+                      );
+                    })
                   : line.text}
               </span>
             </div>

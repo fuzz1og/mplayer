@@ -169,3 +169,57 @@ describe('playbackClock（桌面播放时钟：采样节奏 / 暂停 / seek / �
     expect(clock.getSnapshot().position).toBe(10.8);
   });
 });
+
+describe('逐字填充用的只读视图（#722：getPositionNow / isPlaying / 播放态订阅）', () => {
+  it('isPlaying 跟着 setPlaying 变，且只在真实切换时通知', () => {
+    const listener = vi.fn();
+    clock.subscribePlaying(listener);
+    expect(clock.isPlaying()).toBe(false);
+
+    clock.setPlaying(true);
+    expect(clock.isPlaying()).toBe(true);
+    clock.setPlaying(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    clock.setPlaying(false);
+    expect(clock.isPlaying()).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('播放中按最近一次采样插值，超过一个采样窗口就夹住', () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    position = 4;
+    clock.setPosition(4);
+    clock.setPlaying(true); // 立即采样一次：lastTickAt = 1000
+
+    now.mockReturnValue(1120);
+    expect(clock.getPositionNow()).toBeCloseTo(4.12, 6);
+
+    now.mockReturnValue(9999); // 被节流：最多补一个采样窗口
+    expect(clock.getPositionNow()).toBeCloseTo(4.25, 6);
+    now.mockRestore();
+  });
+
+  it('暂停与 seek 挂起时都不插值（回落到快照位置）', () => {
+    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+    position = 4;
+    clock.setPosition(4);
+    clock.setPlaying(true);
+    clock.setPlaying(false);
+
+    now.mockReturnValue(5000);
+    expect(clock.getPositionNow()).toBe(4);
+
+    clock.setPosition(30); // seek 挂起：快照保持乐观目标
+    clock.setPlaying(true);
+    now.mockReturnValue(9000);
+    expect(clock.getPositionNow()).toBe(30);
+    now.mockRestore();
+  });
+
+  it('没有采样过（lastTickAt 为 0）时返回快照位置', () => {
+    const fresh = createPlaybackClock();
+    expect(fresh.getPositionNow()).toBe(0);
+    fresh.destroy();
+  });
+});
