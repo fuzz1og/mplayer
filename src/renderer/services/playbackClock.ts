@@ -29,7 +29,7 @@ export interface PlaybackClock {
   getSnapshot(): PlaybackSnapshot;
   /** 是否正在播放：暂停时 false（不随 tick 抖动） */
   isPlaying(): boolean;
-  /** 按最近一次采样插值出的当前位置（秒）：暂停 / seek 挂起时等于快照位置 */
+  /** 播放中的实时位置（秒）：直读传输层且不回退超过 50ms；暂停 / seek 挂起时等于快照位置 */
   getPositionNow(): number;
   /** 播放/暂停切换：暂停冻结采样，快照保留最后位置 */
   setPlaying(playing: boolean): void;
@@ -49,6 +49,8 @@ export const DEFAULT_PLAYBACK_INTERVAL_MS = 250;
 export const SEEK_SETTLE_TOLERANCE_S = 1;
 /** seek 乐观值的兜底存活时间（毫秒）：超时即恢复按传输层采样（seek 失败不冻结进度条）。 */
 export const SEEK_SETTLE_TIMEOUT_MS = 1500;
+/** getPositionNow 的单调容差（秒）：传输层采样回退不超过它，逐字填充才不会来回跳。 */
+export const MONOTONIC_TOLERANCE_S = 0.05;
 
 export function createPlaybackClock(options: PlaybackClockOptions = {}): PlaybackClock {
   const intervalMs = options.intervalMs ?? DEFAULT_PLAYBACK_INTERVAL_MS;
@@ -58,8 +60,8 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   let timer: ReturnType<typeof setInterval> | null = null;
   /** seek 乐观值：到传输层采样响应（相对 seek 前位置变化）且追上 target（或超时）之前，忽略采样结果 */
   let pendingSeek: { target: number; from: number; until: number } | null = null;
-  /** 最近一次采样的墙钟时间（performance.now）：getPositionNow 从这里插值 */
-  let lastTickAt = 0;
+  /** 单调护栏：上一次 getPositionNow 的返回值；播放中不允许比它回退超过 MONOTONIC_TOLERANCE_S */
+  let monotonicFloor: number | null = null;
   const listeners = new Set<() => void>();
   const playingListeners = new Set<() => void>();
 
@@ -92,13 +94,13 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       if (!settled) return;
       pendingSeek = null;
     }
-    lastTickAt = performance.now();
     emit({ position: sampled });
   };
 
   return {
     connect(nextSamplePosition) {
       samplePosition = nextSamplePosition;
+      monotonicFloor = null;
     },
 
     subscribe(listener) {
@@ -120,16 +122,20 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
     isPlaying: () => timer !== null,
 
     getPositionNow() {
-      if (timer === null || pendingSeek !== null || lastTickAt === 0) return snapshot.position;
-      // 只插值一个采样窗口：后台被节流时不要把位置甩出去
-      const elapsedMs = Math.min(Math.max(performance.now() - lastTickAt, 0), intervalMs);
-      return snapshot.position + elapsedMs / 1000;
+      if (timer === null || pendingSeek !== null) return snapshot.position;
+      // 直接读传输层（currentTime 是廉价 getter）：与词/字边界共用同一个位置，
+      // 不再「采样 + 外推」——那会让填充每 250ms 往前冲再被快照拽回。
+      const raw = samplePosition();
+      // 护栏记的是「见过的最高位置」，不回写夹紧后的值——否则停滞的采样会被每次调用再往下拽 50ms
+      if (monotonicFloor === null || raw > monotonicFloor) monotonicFloor = raw;
+      return Math.max(monotonicFloor - MONOTONIC_TOLERANCE_S, raw);
     },
 
     setPlaying(playing) {
       const wasPlaying = timer !== null;
       if (!playing) {
         stopTimer();
+        monotonicFloor = null;
       } else if (timer === null) {
         timer = setInterval(tick, intervalMs);
         tick();
@@ -144,7 +150,7 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       pendingSeek = position === from
         ? null
         : { target: position, from, until: Date.now() + SEEK_SETTLE_TIMEOUT_MS };
-      lastTickAt = performance.now();
+      monotonicFloor = null;
       emit({ position });
     },
 
@@ -154,14 +160,14 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
 
     reset() {
       pendingSeek = null;
-      lastTickAt = performance.now();
+      monotonicFloor = null;
       emit({ position: 0, duration: 0 });
     },
 
     destroy() {
       stopTimer();
       pendingSeek = null;
-      lastTickAt = 0;
+      monotonicFloor = null;
       listeners.clear();
       playingListeners.clear();
       samplePosition = () => 0;

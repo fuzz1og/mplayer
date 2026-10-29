@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
-import { parseLRC, findCurrentLyricIndex, type LyricWord, type ParsedLyrics } from '@mplayer/core';
-import { playbackClock, usePlaybackPlaying, usePlaybackSelector } from '@/renderer/services/playbackClock';
+import { parseLRC, findCurrentLyricIndex, type LyricLine, type ParsedLyrics } from '@mplayer/core';
+import {
+  playbackClock,
+  usePlaybackDuration,
+  usePlaybackPlaying,
+  usePlaybackSelector,
+} from '@/renderer/services/playbackClock';
 import '@/renderer/styles/songlist.css';
 
 interface LyricsDisplayProps {
@@ -10,18 +15,43 @@ interface LyricsDisplayProps {
   onLyricClick?: (time: number) => void;
 }
 
-export interface WordFill {
+/** 当前行的一个填充单元：逐字轨用词，普通 LRC 用字（时间轴按行时长线性均分） */
+export interface FillUnit {
+  text: string;
+  time: number;
+  duration: number;
+}
+
+export interface UnitFill {
   index: number;
   progress: number;
 }
 
-/** 词内进度：当前词序号 + 该词已唱比例（0~1，词前/词后按端点夹紧）；没有逐字轨道返回 null */
-export function wordFillAt(words: LyricWord[] | undefined, position: number): WordFill | null {
-  if (!words || words.length === 0) return null;
-  const index = findCurrentLyricIndex(words, position);
-  const word = words[index < 0 ? 0 : index];
-  if (!word) return { index: 0, progress: 0 };
-  const raw = word.duration > 0 ? (position - word.time) / word.duration : (position >= word.time ? 1 : 0);
+/** 最后一行没有下一行时间可借时的行时长：整曲剩余时长，夹在 1.5~5s */
+const LAST_LINE_MIN_S = 1.5;
+const LAST_LINE_MAX_S = 5;
+
+/** 行 → 填充单元：有逐字轨就用词，没有就把正文按字符切、时间轴线性均分（用户要的「线性」） */
+export function lineFillUnits(line: LyricLine, nextLineTime: number | null, songDuration: number): FillUnit[] {
+  if (line.words && line.words.length > 0) {
+    return line.words.map((word) => ({ text: word.text, time: word.time, duration: word.duration }));
+  }
+  const chars = Array.from(line.text);
+  if (chars.length === 0) return [];
+  const span = nextLineTime !== null && nextLineTime > line.time
+    ? nextLineTime - line.time
+    : Math.min(LAST_LINE_MAX_S, Math.max(LAST_LINE_MIN_S, Math.max(songDuration, line.time + LAST_LINE_MIN_S) - line.time));
+  const unit = span / chars.length;
+  return chars.map((char, index) => ({ text: char, time: line.time + index * unit, duration: unit }));
+}
+
+/** 单元内进度：当前单元下标 + 已唱比例（0~1，单元前/后按端点夹紧）；没有单元返回 null */
+export function unitFillAt(units: FillUnit[] | undefined, position: number): UnitFill | null {
+  if (!units || units.length === 0) return null;
+  const index = findCurrentLyricIndex(units, position);
+  const unit = units[index < 0 ? 0 : index];
+  if (!unit) return { index: 0, progress: 0 };
+  const raw = unit.duration > 0 ? (position - unit.time) / unit.duration : (position >= unit.time ? 1 : 0);
   return { index: index < 0 ? 0 : index, progress: Math.min(1, Math.max(0, raw)) };
 }
 
@@ -33,7 +63,10 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
 }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const activeLineRef = useRef<HTMLDivElement>(null);
-  const currentWordElRef = useRef<HTMLSpanElement | null>(null);
+  const unitElsRef = useRef<HTMLElement[]>([]);
+  const unitsRef = useRef<FillUnit[]>([]);
+  const fillIndexRef = useRef(-1);
+  const applyFillRef = useRef<(position: number) => void>(() => {});
 
   const parsedLyrics: ParsedLyrics = useMemo(() => {
     if (!lrcContent) {
@@ -46,51 +79,78 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
     }
   }, [lrcContent]);
 
-  // 只订阅派生值「当前行序号」：250ms 的采样落到歌词上只在换行时重渲染一次，
-  // 不再每次 tick 重算并重渲染全部歌词行
+  // 只订阅「当前行序号」：换行才重渲染整块歌词；单元下标与字内进度全在 imperative 路径里
   const currentLineIndex = usePlaybackSelector((snapshot) => {
     if (!parsedLyrics?.lines || parsedLyrics.lines.length === 0) return -1;
     const currentTime = typeof snapshot.position === 'number' && !isNaN(snapshot.position) ? snapshot.position : 0;
     return findCurrentLyricIndex(parsedLyrics.lines, currentTime);
   });
 
-  // 逐字歌词（#722）同理只在换字时重渲染：返回原生数字，未变化不打扰订阅者。
-  // 返回的是「已唱到第几个词」，渲染时行首到它整段标已唱（卡拉 OK sweep）。
-  const currentWordIndex = usePlaybackSelector((snapshot) => {
-    const lines = parsedLyrics?.lines;
-    if (!lines || lines.length === 0) return -1;
-    const currentTime = typeof snapshot.position === 'number' && !isNaN(snapshot.position) ? snapshot.position : 0;
-    const lineIndex = findCurrentLyricIndex(lines, currentTime);
-    const words = lineIndex >= 0 ? lines[lineIndex].words : undefined;
-    if (!words || words.length === 0) return -1;
-    return findCurrentLyricIndex(words, currentTime);
-  });
-
   const playing = usePlaybackPlaying();
-  const activeWords = currentLineIndex >= 0 ? parsedLyrics.lines[currentLineIndex]?.words : undefined;
+  const songDuration = usePlaybackDuration();
 
-  // 字内连续填充（#722）：只在「播放中 + 当前行有逐字轨道」时跑 rAF，每帧只给当前词写一个
-  // CSS 变量，不 setState（每帧 React 渲染会击穿行的 memo 纪律）；词边界仍由 currentWordIndex 驱动。
+  const activeUnits = useMemo(() => {
+    if (currentLineIndex < 0) return [] as FillUnit[];
+    const line = parsedLyrics.lines[currentLineIndex];
+    if (!line) return [] as FillUnit[];
+    const next = parsedLyrics.lines[currentLineIndex + 1];
+    return lineFillUnits(line, next ? next.time : null, songDuration);
+  }, [currentLineIndex, parsedLyrics, songDuration]);
+  unitsRef.current = activeUnits;
+
+  // 一帧一次：同一个位置同时算「第几个单元」与「单元内进度」。只在单元变化时改 data 属性，
+  // 每帧只写当前单元的一个 CSS 变量，不 setState（词/字边界不再走 React）。
+  applyFillRef.current = (position: number) => {
+    const units = unitsRef.current;
+    const els = unitElsRef.current;
+    if (units.length === 0 || els.length === 0) return;
+    const fill = unitFillAt(units, position);
+    if (!fill) return;
+    if (fill.index !== fillIndexRef.current) {
+      for (let i = 0; i < els.length; i++) {
+        const element = els[i];
+        if (!element) continue;
+        if (i < fill.index) {
+          element.setAttribute('data-sung', '');
+          element.removeAttribute('data-current');
+        } else if (i === fill.index) {
+          element.setAttribute('data-sung', '');
+          element.setAttribute('data-current', '');
+        } else {
+          element.removeAttribute('data-sung');
+          element.removeAttribute('data-current');
+        }
+      }
+      fillIndexRef.current = fill.index;
+    }
+    const current = els[fill.index];
+    if (current) current.style.setProperty('--fill', `${(fill.progress * 100).toFixed(2)}%`);
+  };
+
+  // 换行 / 换曲 / 播放态变化：重新绑定单元元素并同步画一帧（暂停、刚打开也有正确填充）
   useEffect(() => {
-    if (!playing || !activeWords || activeWords.length === 0) return;
+    const line = activeLineRef.current;
+    unitElsRef.current = line ? Array.from(line.querySelectorAll<HTMLElement>('.lyrics__unit')) : [];
+    fillIndexRef.current = -1;
+    applyFillRef.current(playbackClock.getPositionNow());
+  }, [currentLineIndex, activeUnits, playing]);
+
+  // 播放中每帧填充：位置直读传输层（getPositionNow），与单元下标同一个读数
+  useEffect(() => {
+    if (!playing) return;
     let frame = 0;
     const paint = (): void => {
-      const element = currentWordElRef.current;
-      const fill = wordFillAt(activeWords, playbackClock.getPositionNow());
-      if (element && fill) element.style.setProperty('--word-fill', `${(fill.progress * 100).toFixed(2)}%`);
+      applyFillRef.current(playbackClock.getPositionNow());
       frame = requestAnimationFrame(paint);
     };
     frame = requestAnimationFrame(paint);
     return () => cancelAnimationFrame(frame);
-  }, [playing, activeWords]);
+  }, [playing]);
 
-  // 一次性同步绘制：暂停/刚打开或换词时当前词还没有 --word-fill，先按当前位置画一帧，
-  // 否则已唱区段是白的、当前字却整字灰。播放中由上面的 rAF 每帧覆盖同一个 var。
-  useEffect(() => {
-    const element = currentWordElRef.current;
-    const fill = wordFillAt(activeWords, playbackClock.getPositionNow());
-    if (element && fill) element.style.setProperty('--word-fill', `${(fill.progress * 100).toFixed(2)}%`);
-  }, [playing, currentLineIndex, currentWordIndex, activeWords]);
+  // 暂停中的 seek / 切歌：订阅快照（不引起 React 渲染）后同步重画一次
+  useEffect(() => playbackClock.subscribe(() => {
+    if (!playbackClock.isPlaying()) applyFillRef.current(playbackClock.getPositionNow());
+  }), []);
 
   useEffect(() => {
     if (currentLineIndex < 0 || !activeLineRef.current || !containerRef.current) {
@@ -132,6 +192,7 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
       <div className="lyrics__lines">
         {parsedLyrics.lines.map((line, index) => {
           const isActive = index === currentLineIndex;
+          const units = isActive ? activeUnits : null;
 
           return (
             <div
@@ -142,21 +203,12 @@ const LyricsDisplay: React.FC<LyricsDisplayProps> = ({
               data-active={isActive || undefined}
             >
               <span className="lyrics__text">
-                {line.words && line.words.length > 0
-                  ? line.words.map((word, wordIndex) => {
-                      const isCurrentWord = isActive && wordIndex === currentWordIndex;
-                      return (
-                        <span
-                          key={wordIndex}
-                          ref={isCurrentWord ? currentWordElRef : null}
-                          className="lyrics__word"
-                          data-sung={(isActive && wordIndex <= currentWordIndex) || undefined}
-                          data-current-word={isCurrentWord || undefined}
-                        >
-                          {word.text}
-                        </span>
-                      );
-                    })
+                {units && units.length > 0
+                  ? units.map((unit, unitIndex) => (
+                      <span key={unitIndex} className="lyrics__unit">
+                        {unit.text}
+                      </span>
+                    ))
                   : line.text}
               </span>
             </div>

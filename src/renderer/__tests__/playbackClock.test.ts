@@ -186,40 +186,60 @@ describe('逐字填充用的只读视图（#722：getPositionNow / isPlaying / �
     expect(listener).toHaveBeenCalledTimes(2);
   });
 
-  it('播放中按最近一次采样插值，超过一个采样窗口就夹住', () => {
-    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+  it('播放中直读传输层位置，而不是按快照外推（词边界与填充共用一个读数）', () => {
     position = 4;
     clock.setPosition(4);
-    clock.setPlaying(true); // 立即采样一次：lastTickAt = 1000
+    clock.setPlaying(true);
 
-    now.mockReturnValue(1120);
-    expect(clock.getPositionNow()).toBeCloseTo(4.12, 6);
-
-    now.mockReturnValue(9999); // 被节流：最多补一个采样窗口
-    expect(clock.getPositionNow()).toBeCloseTo(4.25, 6);
-    now.mockRestore();
+    position = 4.63;
+    expect(clock.getPositionNow()).toBeCloseTo(4.63, 6);
+    // 快照仍停在最近一次 250ms 采样值，进度条语义不变
+    expect(clock.getSnapshot().position).toBe(4);
   });
 
-  it('暂停与 seek 挂起时都不插值（回落到快照位置）', () => {
-    const now = vi.spyOn(performance, 'now').mockReturnValue(1000);
+  it('采样回退时按单调护栏夹住：最多退 50ms', () => {
+    position = 10;
+    clock.setPosition(10);
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBeCloseTo(10, 6);
+
+    position = 9.5; // 传输层回退 500ms
+    expect(clock.getPositionNow()).toBeCloseTo(9.95, 6);
+    // 连续读不继续下沉（护栏是「见过的最高位置」，不是上次返回值）
+    expect(clock.getPositionNow()).toBeCloseTo(9.95, 6);
+    expect(clock.getPositionNow()).toBeCloseTo(9.95, 6);
+
+    position = 9.98; // 回到护栏之上，跟随真实位置
+    expect(clock.getPositionNow()).toBeCloseTo(9.98, 6);
+  });
+
+  it('setPosition / 暂停都会清掉护栏（seek 后退不被夹住）', () => {
+    position = 10;
+    clock.setPosition(10);
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBeCloseTo(10, 6);
+
+    position = 2;
+    clock.setPosition(2);
+    expect(clock.getPositionNow()).toBeCloseTo(2, 6);
+
+    position = 5;
+    clock.setPlaying(false);
+    position = 2.5;
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBeCloseTo(2.5, 6);
+  });
+
+  it('暂停与 seek 挂起时都回落到快照位置', () => {
     position = 4;
     clock.setPosition(4);
     clock.setPlaying(true);
     clock.setPlaying(false);
-
-    now.mockReturnValue(5000);
+    position = 9;
     expect(clock.getPositionNow()).toBe(4);
 
     clock.setPosition(30); // seek 挂起：快照保持乐观目标
     clock.setPlaying(true);
-    now.mockReturnValue(9000);
     expect(clock.getPositionNow()).toBe(30);
-    now.mockRestore();
-  });
-
-  it('没有采样过（lastTickAt 为 0）时返回快照位置', () => {
-    const fresh = createPlaybackClock();
-    expect(fresh.getPositionNow()).toBe(0);
-    fresh.destroy();
   });
 });
