@@ -4,6 +4,10 @@ forceCodeSigning: false
 afterPack: scripts/afterPack.js
 # 安装包最大压缩（normal → maximum，体积再降 ~20-30%，代价是打包/安装稍慢）
 compression: maximum
+# 三平台统一只保留中文/英文语言包（mac 的 .lproj 与 win/linux 的 locale.pak 分别裁剪）
+electronLanguages:
+  - zh-CN
+  - en-US
 publish:
   provider: github
   owner: fuzz1og
@@ -25,14 +29,12 @@ files:
   - "!dist/*.7z"
   - "!dist/*.zip"
   - "!dist/builder-*"
-  - "!dist/win-unpacked/**"
-  - "!dist/mac/**"
+  # staging 目录按「平台+架构」命名；漏掉 mac-arm64 会把整份 Electron.app 卷进 asar（#718）
+  - "!dist/win-*/**"
+  - "!dist/mac*/**"
   - "!dist/linux*/**"
 win:
   icon: resources/icon.ico
-  electronLanguages:
-    - zh-CN
-    - en-US
   target:
     - target: nsis
       arch:
