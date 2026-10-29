@@ -169,3 +169,77 @@ describe('playbackClock（桌面播放时钟：采样节奏 / 暂停 / seek / �
     expect(clock.getSnapshot().position).toBe(10.8);
   });
 });
+
+describe('逐字填充用的只读视图（#722：getPositionNow / isPlaying / 播放态订阅）', () => {
+  it('isPlaying 跟着 setPlaying 变，且只在真实切换时通知', () => {
+    const listener = vi.fn();
+    clock.subscribePlaying(listener);
+    expect(clock.isPlaying()).toBe(false);
+
+    clock.setPlaying(true);
+    expect(clock.isPlaying()).toBe(true);
+    clock.setPlaying(true);
+    expect(listener).toHaveBeenCalledTimes(1);
+
+    clock.setPlaying(false);
+    expect(clock.isPlaying()).toBe(false);
+    expect(listener).toHaveBeenCalledTimes(2);
+  });
+
+  it('播放中直读传输层位置，而不是按快照外推（词边界与填充共用一个读数）', () => {
+    position = 4;
+    clock.setPosition(4);
+    clock.setPlaying(true);
+
+    position = 4.63;
+    expect(clock.getPositionNow()).toBeCloseTo(4.63, 6);
+    // 快照仍停在最近一次 250ms 采样值，进度条语义不变
+    expect(clock.getSnapshot().position).toBe(4);
+  });
+
+  it('采样回退时按单调护栏夹住：最多退 50ms', () => {
+    position = 10;
+    clock.setPosition(10);
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBeCloseTo(10, 6);
+
+    position = 9.5; // 传输层回退 500ms
+    expect(clock.getPositionNow()).toBeCloseTo(9.95, 6);
+    // 连续读不继续下沉（护栏是「见过的最高位置」，不是上次返回值）
+    expect(clock.getPositionNow()).toBeCloseTo(9.95, 6);
+    expect(clock.getPositionNow()).toBeCloseTo(9.95, 6);
+
+    position = 9.98; // 回到护栏之上，跟随真实位置
+    expect(clock.getPositionNow()).toBeCloseTo(9.98, 6);
+  });
+
+  it('setPosition / 暂停都会清掉护栏（seek 后退不被夹住）', () => {
+    position = 10;
+    clock.setPosition(10);
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBeCloseTo(10, 6);
+
+    position = 2;
+    clock.setPosition(2);
+    expect(clock.getPositionNow()).toBeCloseTo(2, 6);
+
+    position = 5;
+    clock.setPlaying(false);
+    position = 2.5;
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBeCloseTo(2.5, 6);
+  });
+
+  it('暂停与 seek 挂起时都回落到快照位置', () => {
+    position = 4;
+    clock.setPosition(4);
+    clock.setPlaying(true);
+    clock.setPlaying(false);
+    position = 9;
+    expect(clock.getPositionNow()).toBe(4);
+
+    clock.setPosition(30); // seek 挂起：快照保持乐观目标
+    clock.setPlaying(true);
+    expect(clock.getPositionNow()).toBe(30);
+  });
+});

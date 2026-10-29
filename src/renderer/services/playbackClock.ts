@@ -23,8 +23,14 @@ export interface PlaybackClock {
   connect(samplePosition: () => number): void;
   /** 订阅快照变化，返回解绑函数 */
   subscribe(listener: () => void): () => void;
+  /** 订阅播放/暂停切换（快照语义不变：位置照旧 250ms 采样，只有播放态通知） */
+  subscribePlaying(listener: () => void): () => void;
   /** 当前快照；未变化时保持同一对象引用（useSyncExternalStore 依赖此约定） */
   getSnapshot(): PlaybackSnapshot;
+  /** 是否正在播放：暂停时 false（不随 tick 抖动） */
+  isPlaying(): boolean;
+  /** 播放中的实时位置（秒）：直读传输层且不回退超过 50ms；暂停 / seek 挂起时等于快照位置 */
+  getPositionNow(): number;
   /** 播放/暂停切换：暂停冻结采样，快照保留最后位置 */
   setPlaying(playing: boolean): void;
   /** 立即改写位置（seek/复播）；即使暂停中也要立刻反映 */
@@ -43,6 +49,8 @@ export const DEFAULT_PLAYBACK_INTERVAL_MS = 250;
 export const SEEK_SETTLE_TOLERANCE_S = 1;
 /** seek 乐观值的兜底存活时间（毫秒）：超时即恢复按传输层采样（seek 失败不冻结进度条）。 */
 export const SEEK_SETTLE_TIMEOUT_MS = 1500;
+/** getPositionNow 的单调容差（秒）：传输层采样回退不超过它，逐字填充才不会来回跳。 */
+export const MONOTONIC_TOLERANCE_S = 0.05;
 
 export function createPlaybackClock(options: PlaybackClockOptions = {}): PlaybackClock {
   const intervalMs = options.intervalMs ?? DEFAULT_PLAYBACK_INTERVAL_MS;
@@ -52,7 +60,10 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   let timer: ReturnType<typeof setInterval> | null = null;
   /** seek 乐观值：到传输层采样响应（相对 seek 前位置变化）且追上 target（或超时）之前，忽略采样结果 */
   let pendingSeek: { target: number; from: number; until: number } | null = null;
+  /** 单调护栏：上一次 getPositionNow 的返回值；播放中不允许比它回退超过 MONOTONIC_TOLERANCE_S */
+  let monotonicFloor: number | null = null;
   const listeners = new Set<() => void>();
+  const playingListeners = new Set<() => void>();
 
   // 只有真正变化才换快照对象并通知：值相同（含 undefined 之外的 NaN 比对交给 React）不打扰订阅者
   const emit = (next: Partial<PlaybackSnapshot>): void => {
@@ -89,6 +100,7 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
   return {
     connect(nextSamplePosition) {
       samplePosition = nextSamplePosition;
+      monotonicFloor = null;
     },
 
     subscribe(listener) {
@@ -98,16 +110,37 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       };
     },
 
+    subscribePlaying(listener) {
+      playingListeners.add(listener);
+      return () => {
+        playingListeners.delete(listener);
+      };
+    },
+
     getSnapshot: () => snapshot,
 
+    isPlaying: () => timer !== null,
+
+    getPositionNow() {
+      if (timer === null || pendingSeek !== null) return snapshot.position;
+      // 直接读传输层（currentTime 是廉价 getter）：与词/字边界共用同一个位置，
+      // 不再「采样 + 外推」——那会让填充每 250ms 往前冲再被快照拽回。
+      const raw = samplePosition();
+      // 护栏记的是「见过的最高位置」，不回写夹紧后的值——否则停滞的采样会被每次调用再往下拽 50ms
+      if (monotonicFloor === null || raw > monotonicFloor) monotonicFloor = raw;
+      return Math.max(monotonicFloor - MONOTONIC_TOLERANCE_S, raw);
+    },
+
     setPlaying(playing) {
+      const wasPlaying = timer !== null;
       if (!playing) {
         stopTimer();
-        return;
+        monotonicFloor = null;
+      } else if (timer === null) {
+        timer = setInterval(tick, intervalMs);
+        tick();
       }
-      if (timer !== null) return;
-      timer = setInterval(tick, intervalMs);
-      tick();
+      if (wasPlaying !== (timer !== null)) playingListeners.forEach((listener) => listener());
     },
 
     setPosition(position) {
@@ -117,6 +150,7 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
       pendingSeek = position === from
         ? null
         : { target: position, from, until: Date.now() + SEEK_SETTLE_TIMEOUT_MS };
+      monotonicFloor = null;
       emit({ position });
     },
 
@@ -126,13 +160,16 @@ export function createPlaybackClock(options: PlaybackClockOptions = {}): Playbac
 
     reset() {
       pendingSeek = null;
+      monotonicFloor = null;
       emit({ position: 0, duration: 0 });
     },
 
     destroy() {
       stopTimer();
       pendingSeek = null;
+      monotonicFloor = null;
       listeners.clear();
+      playingListeners.clear();
       samplePosition = () => 0;
       snapshot = { position: 0, duration: 0 };
     },
@@ -164,4 +201,9 @@ export function usePlaybackPosition(): number {
 /** 当前时长（秒） */
 export function usePlaybackDuration(): number {
   return usePlaybackSelector((snapshot) => snapshot.duration);
+}
+
+/** 是否正在播放（只读）：逐字填充的 rAF 循环靠它起停 */
+export function usePlaybackPlaying(): boolean {
+  return useSyncExternalStore(playbackClock.subscribePlaying, playbackClock.isPlaying, playbackClock.isPlaying);
 }

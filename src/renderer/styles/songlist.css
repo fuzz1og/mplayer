@@ -1849,6 +1849,22 @@
   text-shadow: var(--lyrics-shadow-active);
 }
 
+/* 逐字/逐字模拟填充（#722）：已唱白 / 未唱灰；当前单元用渐变遮罩做字内连续填充 */
+.lyrics__line[data-active] .lyrics__unit {
+  color: var(--text-tertiary);
+}
+
+.lyrics__line[data-active] .lyrics__unit[data-sung] {
+  color: var(--text-primary);
+}
+
+.lyrics__line[data-active] .lyrics__unit[data-current] {
+  color: transparent;
+  background-image: linear-gradient(90deg, var(--text-primary) var(--fill, 0%), var(--text-tertiary) 0);
+  -webkit-background-clip: text;
+  background-clip: text;
+}
+
 /* 拖拽把手与拖拽浮层 */
 
 .drag-handle {
