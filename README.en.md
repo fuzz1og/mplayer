@@ -150,7 +150,7 @@ flowchart LR
 
 | Area | What it does |
 | --- | --- |
-| Playback | Multi-source search, hot charts, three play modes (repeat one / repeat all / shuffle), play next, lyrics, global shortcuts, cover-version detection, skip-on-failure (on by default, can be turned off) |
+| Playback | Multi-source search, hot charts, three play modes (repeat one / repeat all / shuffle), play next, lyrics with karaoke-style word-by-word fill, global shortcuts, cover-version detection, skip-on-failure (on by default, can be turned off) |
 | Source switching | Per-track switching (full-version preference + playability probing + in-place replacement) |
 | Search | Songs / artists tabs, artist browsing and detail, strict-match backfill for songs without a URL |
 | Favourites / history | Automatic URL refresh written back to the DB; auto-recorded, viewable and clearable |
