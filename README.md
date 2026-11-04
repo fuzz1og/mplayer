@@ -232,7 +232,7 @@ npm run verify              # 提交前全量验证：静态检查 + 四套测�
 
 ## 📦 发布
 
-推送 `v*` tag 自动触发 GitHub Actions 构建（桌面三平台 + Android APK / AAB）并上传 GitHub Releases，应用内可检查更新：
+推送 `v*` tag 自动触发 GitHub Actions 构建（桌面三平台 + Android APK / AAB / `.apk.md5` 校验值）并上传 GitHub Releases，应用内可检查更新：
 
 ```bash
 npm run release -- patch     # 一键发布（= ./scripts/release.mjs；验证 → bump → commit → 推 master → tag → 触发 CI）

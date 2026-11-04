@@ -33,6 +33,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 - 双主题 token（system/light/dark 三态，默认跟随系统）+ `textVariants` 语义变体（`packages/mobile/theme/tokens.ts`）。
 - Audio: Android 走自写 Kotlin 模块（`modules/native-player/`，media3），iOS 回落 expo-audio（非 Howler）；手势 PanResponder + Animated；Metro 吃 `packages/core/dist`（core 改动必须 `core:build`；**新增/改名导出**时还要 `npx expo start --clear` 重起 Metro，否则按需加载的旧 chunk 会让真机红屏 `undefined is not a function`——见 `runtime-verification` skill 的陷阱速查 #576）。
 - Android 原生构建（CNG 反向）：原生目录 `packages/mobile/android/` 提交进 git，不再每次 prebuild；**PR / push 不编译原生**，只在发版期由 `release.yml` 的 `build-mobile` 跑 `./gradlew assembleRelease bundleRelease`（产物、签名 keystore、Gradle 缓存的接线见 `release.yml`；本机复现与依赖基线见 `docs/agents/testing.md`「原生发版构建（本机）」；边界与残余风险见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`）。
+- 应用内更新（下载 / `.apk.md5` 校验 / 系统安装器）与发布侧校验资产生成见 `docs/agents/architecture.md`「Mobile」段与 #725；发版流程见 `release` skill。
 
 ### 依赖版本基线
 - **生态耦合集的基线 = Expo SDK 的期望值**，不是 semver 最新：升级动作 `npx expo install --fix`，校验 `npm run verify -- expo`。**别拿「`expo install --check` 全绿」当对齐依据**——它只看已装版本，看不见 `package.json` 的地板；全仓只允许一份 `expo`（根与 `packages/mobile` 同一范围）。
