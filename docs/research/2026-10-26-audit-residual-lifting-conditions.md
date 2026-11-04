@@ -5,6 +5,8 @@
 > 环境：node `v22.23.2` / npm `10.9.8`（与 CI 同款 Node 22）。**所有 registry 与 OSV 读数截至 2026-10-26**（下称「截至 2026-10-26」）。凡实测均标出可复跑的命令；凡未核实一律写进 §3，不做推测。
 > 本笔记**只回答一个问题**：9 条残余里每个直接根包的解除条件是什么。不重复论证「要不要修」，那由 ADR 决策 1 与本票范围决定。
 
+> **更新（复核时刻 2026-11-04，基线 `bad2f549`，#667 / #726）**：本笔记是 **2026-10-26 的一手来源快照**，其「9 条」「node-forge 是唯一真正卡死的点」「node-forge 只能等上游发 >1.4.0」三条结论**已被后续读数取代**：当前 `npm audit --json --package-lock-only` = **39 条（5 high / 33 moderate / 1 low）**；registry 已发 `node-forge` 1.4.1 / 1.4.2 / 1.4.3，OSV `1.4.3` = 0 vulns，解除条件达成；新增 `joi` / `deepmerge` / `glob` / `minimatch` 等 advisory 使「唯一卡死点」不再成立。现值以 [#667](https://github.com/fuzz1og/mplayer/issues/667) 正文与 ADR `docs/adr/2026-09-29-dependency-update-governance.md`「2026-11-04 复核」节为准。§1–§4 的逐包证据、registry / OSV 读数与「截至 2026-10-26」的时限**作为历史快照保留**，引用时带各自的复核时刻（ADR 复核时刻原则）；§1.4 关于 `decode-uri-component@0.5.1` 的 ESM/CJS 崩溃实测本期未推翻。
+
 ---
 
 ## 0. 结论先行

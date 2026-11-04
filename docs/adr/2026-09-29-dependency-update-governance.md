@@ -59,7 +59,7 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
 
 `npm audit`：**16 条（9 high / 7 moderate / 0 critical）→ 9 条（6 high / 3 moderate / 0 critical）**。修掉的 7 条全部是「声明区间内可达 → `npm update` / 同 major 内 `npm install`」，无一条需要 override、无一条是 major 跳级。
 
-**更新（复核时刻 2026-10-27，基线 `4fe85cb`）：残余 9 → 8（`electron`，#658 / PR #671）→ 7（`zod`，#673 落 override）**。现值 **4 high / 3 moderate / 0 critical**，剩余 4 条 high 全部 `via` `node-forge`——只能等上游发版。下文各条为立账快照，逐条当前状态看条目内「已解除 / 已落地」更新。
+**更新（复核时刻 2026-10-27，基线 `4fe85cb`）：残余 9 → 8（`electron`，#658 / PR #671）→ 7（`zod`，#673 落 override）**。现值 **4 high / 3 moderate / 0 critical**，剩余 4 条 high 全部 `via` `node-forge`——只能等上游发版。下文各条为立账快照，逐条当前状态看条目内「已解除 / 已落地」更新；**现值已由文末「2026-11-04 复核」节取代（39 条 = 5 high / 33 moderate / 1 low）**。
 
 ### 已修（7 条，全部 devDependencies 路径，不进产物）
 
@@ -82,6 +82,8 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
 1. **`electron`（high）——进产物，唯一在桌面产物路径上的 high。** 安装版 41.10.7；`fixAvailable` = `electron@45.0.0`（`isSemVerMajor: true`）。**41.x 全系无修复**：advisory 上界 `<42.11.16`，而 41.x 最后一个版本是 **41.10.7**（`npm view electron versions` 实测），根本到不了 42.11.16。**不在本票做的理由**：Electron 是打包后的运行时（主进程 + 内嵌 Chromium），41 → 42 属 major，必须走 `release.yml` 的完整打包与安装包冒烟，且需逐个核 `contextIsolation` / preload 桥 / `electron-updater` 在新 Chromium 下的行为——与本票「同 major 内定点修」不同性质。**另开 issue 跟踪**（见 #656 评论的交叉引用）。可利用性：8 条 advisory 里 7 条是 low/moderate，唯一 high 是「compromised eMudhra intermediate certificates」的证书缓解（`<42.11.16`），对本仓（不加载外部证书链、不跑不可信内容）风险有限但**不归零**。
    - **已解除（2026-10-27，#658 / PR #671）**：`electron` 由 `^41.7.1` 抬到 **`^44.9.3`**，audit 残余 **9 → 8**。落点选 44 而非 42 的依据：42.x 的 EOL 是 2026-10-20（早于本票创建日），官方只支持最新 3 个 major；45.0.0 发布仅 5 天、低于本仓 `dependabot.yml` 的 30 天 major 冷却，且 45 起 Windows 的 `electron_wer.dll` 改名要求 `app-builder-lib >= 26.18.1`（本仓 26.17.0）会连带升级。**唯一杠杆是改 manifest**：`^41` 的 caret 封顶 `<42.0.0`，override 对直接依赖报 `EOVERRIDE`（见本文 override 生命周期节）。同时修掉两处因 42 移除 `postinstall` 而失效的文档（`npm rebuild electron` 实测空转，改用 `npx install-electron`），并按 44 的要求补 `mac.minimumSystemVersion: "13.0"`。**证据**：真 Electron 44.9.3 + 打包产物冒烟（启动 / preload 桥 / IPC / 托盘）+ 本地 feed 升级演练（`--updated,/S,--force-run`，静默且沿用原安装目录）。
 2. **`node-forge`（high）——上游无干净版本，与 #636 同类的「真·无解」。** registry `latest` = **1.4.0**，advisory `GHSA-86w9-cpqp-85rv` 区间 `introduced: 0` → **`last_affected: 1.4.0`**（OSV 实测，未撤回）。`npm view node-forge versions` 比 1.4.0 更高的版本**不存在**，因此 override 无论钉哪一版都逃不掉——这与 braces 那次「两条区间盖满」的机理不同，**这次是单条区间就是开区间且上界 = registry 最新版**，更彻底。路径：`expo → @expo/cli → node-forge`，`@expo/cli` 声明 `^1.3.3`。可达性：RSA PKCS#1 v1.5 **签名验证**接受多余嵌套 `DigestAlgorithm`，本仓不调用 `node-forge` 做签名验证（它是 `@expo/cli` 做代码签名证书链的依赖，只在移动端构建期跑），运行时不可达。解除条件：node-forge 发 > 1.4.0。
+    - **更新（复核时刻 2026-11-04，基线 `bad2f549`，#667 / #726）：该条件已达成** —— registry 已发 `1.4.1`（2026-10-27）/ `1.4.2`（2026-10-27）/ `1.4.3`（2026-11-04），`npm view node-forge version` = 1.4.3；OSV `POST /v1/query` 实测 `1.4.3` = **0 vulns**、`1.4.0` = 12 条（全部 `<=1.4.0`）。父级 `^1.3.3` 区间内可达，`npm audit --json` 对 node-forge 报 `fixAvailable: true`。**本条不再是卡死点**，但 lock 仍 1.4.0，须定点修 + `npm ci --ignore-scripts` / `npm run verify -- all` 复核；本轮不改依赖，记为 #667 新工作项。
+
 3. **`zod`（high）——上游有干净版但被声明区间挡住，且盲顶有风险。** 装 3.25.76；advisory `GHSA-mrhx-c7xc-m3w5` 区间 `introduced: 0` → **`fixed: 4.6.6`**（OSV 实测）。`npm view zod version` = 4.6.7，即**干净版本存在**。挡路的是声明：`@expo/cli@57.0.31` 写 `zod: ^3.25.76`（**3.x**），`eslint-plugin-react-hooks@7.1.1` 写 `^3.25.0 || ^4.0.0`（跨 major 兼容）。**读数按基线对齐（复核时刻 2026-10-27）**：原文「override 到 4.6.7 实测可把 16 → 8」是「七项定点修 + zod」的合计量（16 → 9 → 8），不是单包效果——单包只消一条。研究笔记的「9 → 8」为当时基线（electron 仍在）下 `--package-lock-only` 重算，成立但非真安装；#658 落 electron 后基线移到 8，本 PR 真安装 + 全链路实测 **8 → 7**（基线 `4fe85cb`）。三处读数各自成立，引用时带基线。但 `@expo/cli` 是 Expo 打包/开发服务器入口，zod 3 → 4 有已知 breaking（schema API 变动），**盲顶属于「用打包期崩溃换一条 high」**，不是定点修。处置：记残余，**须先有人验一遍 `npx expo` 全链路（`expo start` / `expo export` / 原生构建）在 zod 4 下可用**，才轮得到 override。
    - **已落地（复核时刻 2026-10-27，#668 验证 / #673 实施，基线 `4fe85cb`）**：根 `overrides.zod = 4.6.7`。#668 把处置要求的链路全部跑绿——`expo start`（Metro 起服 + 真实拉到 15.2MB dev bundle）、`expo export`（Android hbc 7.6MB + metadata）、`./gradlew :app:createBundleReleaseJsAndAssets`（非 dry-run，BUILD SUCCESSFUL）、`npm run lint`（另外两个 zod 消费者 `eslint-plugin-react-hooks@7.1.1` 与 `zod-validation-error@4.0.2` 声明同为 `^3.25.0 || ^4.0.0`，本就含 4.x；`--max-warnings 0` 零告警）+ `npm ci --ignore-scripts` 后 `npm run verify -- all` 全绿；override 属失效三成因之外的干净生效（无 `EOVERRIDE`/`ETARGET`，lock 回读 4.6.7 且穿得过 CI 式全新安装）。**唯一实测语义漂移**：`issues[].code` 改名（url `invalid_string` → `invalid_format`、enum `invalid_enum_value` → `invalid_value`），`@expo/cli` 全 `build/src` 无任何按 zod issue code 分支的代码（唯一消费点只取 `error.message` 文本），不落到可见面。**越界义务**：`@expo/cli` 声明区间 `^3.25.76` 被越过，其后续升级带来的 zod 用法漂移由本仓自担——复验触发条件与配方见下文「override 的越界维护义务」。
 4. **`expo` / `@expo/cli` / `@expo/code-signing-certificates`（high ×3）——纯传递，无独立 sink。** 三者的 `via` 分别指向 `@expo/cli`、`node-forge` / `zod` / `@expo/code-signing-certificates`、`node-forge`，**自身没有独立 advisory**。也就是说它们只是第 2、3 条在依赖树上的投影，随 `node-forge` 发版或 `zod` 解禁自动消解。**更新（2026-10-27 复核，#673 落 zod override 后，基线 `4fe85cb`）**：`@expo/cli` 的投影随之消失，三条的 via 链全部收敛到 `node-forge`——`@expo/cli via @expo/code-signing-certificates/node-forge`、`@expo/code-signing-certificates via node-forge`、`expo via @expo/cli`。`npm audit fix --force` 建议的 `expo@44.0.6` 是**降级到 SDK 44**（当前 SDK 57），直接违背本 ADR 决策 1，不可采。
@@ -149,3 +151,53 @@ ls node_modules/uuid 2>/dev/null || echo ABSENT   # 未安装
 实例：`overrides.zod = 4.6.7` 越过 `@expo/cli` 的 `^3.25.76`。#668 能证明的只是**当前** `@expo/cli@57.0.32` 的两处 zod 消费文件（`DevToolsPlugin.schema` / `createMCPDevToolsExtensionSchema`）在 4.6.7 下逐条 parity——`@expo/cli` 一旦升级并新增 zod 用法（尤其 `.parse()` 读 `issues[].code`、或把 zod 4 已移除的 `ZodTypeAny` 之类引用带进运行路径），这条 override 会替全仓埋雷，且不会有任何安装期信号。
 
 义务（已写进残余清单 zod 条目）：每次 `@expo/cli` major/minor 变化，按 #668 验收评论的配方重验其 zod 消费面（grep 消费点 → 真实构建产物 v3/v4 parity → 三条 Expo 链路 + lint），约 1 小时。同法适用于今后任何越界钉版：不写复验义务的 override 不予落地。
+
+## 2026-11-04 复核（#726 周报：上期 7 → 本期 39）
+
+**复核时刻 2026-11-04（Asia/Hong_Kong）· 基线 `bad2f5498ac08522b8a1759a839a2a56ded9dc26`**（2026-10-29 `chore: bump version to 1.9.1`，= `origin/master` = 出票 run 41475853985 的 headSha）· node `v22.23.2` / npm `10.9.8`（CI 同款）。
+
+| 读数 | 目录 | 命令 | node_modules | 未提交依赖改动 | 结果 |
+| --- | --- | --- | --- | --- | --- |
+| 主读数（CI 同口径，本文 L131） | 干净 worktree `dsh-4a0e5810-cc26` | `npm audit --json --package-lock-only` | 无 | 无 | **39**（0 critical / 5 high / 33 moderate / 1 low） |
+| 装依赖环境复核 | 主检出 `D:/Playground/mplayer` | `npm audit --json` | 真安装 | 有：`expo-intent-launcher ~57.0.1`（mobile manifest 1 行 + lock 1 条） | **同为 39**，条目名 / severity 逐条一致 |
+
+两次读数同基线、同一份已提交 lock；未提交的 `expo-intent-launcher` **0 新增 0 消解** audit 条目。本期未出现上文「9 → 8 vs 8 → 7」那种版本漂移。按本文 L131，以干净基线 `--package-lock-only` 读数为准；按 manifest 理想树重算与按 lock 的差别只落在 `fixAvailable` 目标（`typescript-eslint@8.36.0` vs `8.14.0`、`@typescript-eslint/type-utils` 区间 `>=5.62.1-alpha.0` vs `>=5.9.2-alpha.0`、部分 `effects`），**不动条目集合与 severity**。
+
+### 与上期逐条比对（只记新增 / 消解）
+
+上期 = 本文 L62 的 **7 条（4 high / 3 moderate，复核时刻 2026-10-27，基线 `4fe85cb`）**：`node-forge` / `@expo/cli` / `@expo/code-signing-certificates` / `expo`（4 high）+ `expo-router` / `query-string` / `decode-uri-component`（3 moderate）。**新增 33 / 消解 1 / 沿用 6**，7 − 1 + 33 = 39。
+
+- **消解 1（读数层面，不是上游修复）**：`@expo/code-signing-certificates` 本期 39 条里不再单列。lock 里仍 `0.0.6`、仍 `node-forge: ^1.3.3`；变化是 node-forge 本期 `effects=[]` 不再向上投影，且 `expo` / `@expo/cli` 改由 glob/minimatch 投影成 moderate（原「high via node-forge」）。**记账勿当成漏洞已修**。
+- **沿用 6（按本文 L130 直接引用，不重做归因）**：`node-forge`（仍 high）、`expo` / `@expo/cli`（high → moderate，via 换链）、`expo-router` / `query-string` / `decode-uri-component`（moderate → high，因新增 `GHSA-qr28-fpjm-wq7f` `<=0.5.0`）。
+- **新增 33**：4 个根 advisory —— `joi` high（`GHSA-4528-x5fx-h6hg`，`>=18.0.0 <18.3.1`）、`deepmerge` low（`GHSA-gcqx-w48m-w2h4`）、`glob` moderate（`GHSA-3g3m-2fjr-6pw4`，`>=9.0.0 <=14.0.1`）、`minimatch` moderate（`GHSA-g3hv-75wg-m249`，`<11.0.1`）；`decode-uri-component` 新增第二条 `GHSA-qr28-fpjm-wq7f`（high，`<=0.5.0`）；另 **29 条 moderate** 为 glob/minimatch 投影：Expo 链 `@expo/config` / `@expo/config-plugins` / `@expo/fingerprint` / `@expo/inline-modules` / `@expo/local-build-cache-provider` / `@expo/metro-config` / `@expo/prebuild-config`（7），electron-builder 链 `electron-builder` / `app-builder-lib` / `dmg-builder` / `electron-builder-squirrel-windows` / `electron-winstaller` / `@electron/asar` / `@electron/universal` / `dir-compare` / `filelist` / `jake` / `ejs` / `rimraf` / `temp`（13），ESLint 链 `typescript-eslint` / `@typescript-eslint/eslint-plugin` / `@typescript-eslint/parser` / `@typescript-eslint/type-utils` / `@typescript-eslint/typescript-estree` / `@typescript-eslint/utils` / `eslint` / `@eslint-community/eslint-utils` / `@eslint/config-array`（9）。
+
+### OSV 自检（本文 L101 配方，2026-11-04）
+
+`POST https://api.osv.dev/v1/query`（`{"package":{"name":...,"ecosystem":"npm"},"version":...}`）+ `npm view`：
+
+| 包@版本 | OSV vulns | npm `latest` | 结论（复核时刻 2026-11-04） |
+| --- | --- | --- | --- |
+| `node-forge@1.4.0` | **12**（全部 `<=1.4.0`） | 1.4.3 | lock 里装的是受影响版 |
+| `node-forge@1.4.3` | **0** | 1.4.3 | 上游已发 1.4.1 / 1.4.2 / 1.4.3（10-27 / 10-27 / 11-04），**解除条件达成** |
+| `joi@18.2.9` | 1（`GHSA-4528-x5fx-h6hg`） | 18.3.1 | `wait-on@9.5.1` 声明 `joi: ^18.2.9`，18.3.1 区间内可达 |
+| `joi@18.3.1` | **0** | 18.3.1 | 非破坏性修法存在 |
+| `glob@14.0.1` / `glob@14.0.3` | 1 / **0** | 14.0.3 | 干净版存在，但父级需 major |
+| `minimatch@11.0.0` / `minimatch@11.0.4` | 1 / **0** | 11.0.4 | 同上 |
+| `deepmerge@4.3.1` | 1 | 4.3.1 | **`latest` 即命中**，无干净版本 |
+| `decode-uri-component@0.5.1` | **0** | 0.5.1 | 干净但仍被 `query-string@7` 的 `^0.2.2` 封死，且 ESM/CJS 崩（调研 §1.4） |
+
+### 结论重估与新的工作项
+
+**「node-forge 是唯一真正卡死的点」（#667 正文旧结论）在 2026-11-04 读数下两端都不成立**：① node-forge 上游已发 >1.4.0，`^1.3.3` 区间内可达干净版 `1.4.3`，`npm audit --json` 对它报 `fixAvailable: true`，本身不再是卡死点；② 卡死点变成多簇 —— `deepmerge`（无干净版本）、`glob` / `minimatch`（干净版存在但父级需 major，`audit fix --force` 建议 `expo@51.0.39` 降级，违背决策 1）、`decode-uri-component` 链（需 SDK 58）、electron-builder / typescript-eslint 两族投影。
+
+**两条新的可定点修工作项（登记在 #667，本轮不改 `package.json` / `package-lock.json`）**：
+
+1. `node-forge → 1.4.3`：同 major 定点修（`^1.3.3` 内），解除条件已达成；须 `npm ci --ignore-scripts` + `npm run verify -- all` 复核。
+2. `joi → 18.3.1`：`wait-on@9.5.1` 声明 `joi: ^18.2.9`，18.3.1 在区间内，非破坏性。周报写的「fix available via `npm audit fix`」对应 `fixAvailable: true`，但 **本文 L47 已实测本仓 `npm audit fix` 不可用**（根 `overrides` 引发 `ERESOLVE`），须走同 major 定点修而非整树 `audit fix`，并同样跑 `npm ci` + verify。
+
+### 交叉校验与重跑触发
+
+audit-weekly 对 #726 的三组读数（真安装主检出 / 干净基线 lock-only / 无 node_modules 不 lock-only）全部 **39 / 5 / 33 / 1**、条目集合一致，与本次带基线实测无冲突；差异只在上文列出的 `fixAvailable` 目标重算。本文 L130「周报分诊只记新增/消解」与 L92「复核时刻原则」本期均适用 —— 其中 node-forge 由「等上游发版」翻成「上游已发版」正是 L100 所说「`latest` 不是永久事实」的又一实例。
+
+PR #727 / #728 仍 OPEN（audit-weekly 提供），合并后 lock 会变；**#667 需按新 lock 重跑读数**。#667 保持 OPEN（验收标准：只在残余清零时关闭）。
+
