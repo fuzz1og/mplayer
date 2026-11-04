@@ -118,9 +118,8 @@ android {
                 keyAlias System.getenv('ANDROID_KEYSTORE_KEY_ALIAS')
                 keyPassword System.getenv('ANDROID_KEYSTORE_KEY_PASSWORD')
             }
-            // #725：v1+v2 双签，兼容只认 JAR 签名的老 ROM / 第三方安装器。
+            // #725：只补 v1（规格要求）；v2 由 AGP 默认开启。
             enableV1Signing true
-            enableV2Signing true
         }
     }
     buildTypes {

@@ -1,8 +1,7 @@
 #!/usr/bin/env node
 /**
- * apk-md5.mjs — 发布侧生成 APK 校验资产（#725）：md5sum 兼容行 `<32位小写hex>  <文件名>`。
- * 流式哈希，55MB 安装包不进内存；应用内更新下载完拿它核对，坏包在安装前就被拦下。
- * 退出码：0 成功 / 2 参数或输入有问题（含文件不存在）/ 1 读文件或写输出失败。
+ * apk-md5.mjs — #725：生成 md5sum 兼容的 APK 校验行；流式哈希，55MB 不进内存。
+ * 退出码 0 成功 / 2 参数或输入问题 / 1 读写失败。
  */
 
 import { createHash } from 'node:crypto';
@@ -14,7 +13,6 @@ const USAGE = [
   '输出: 每行 `<md5>  <文件名>`（文件名取 basename，md5sum -c 兼容）；同时写 stdout 与 --out。',
 ].join('\n');
 
-/** 参数或输入问题（退出码 2）：带中文错误 + 用法，避免 CI 日志里只剩栈。 */
 function fail(message) {
   console.error('✗ ' + message);
   console.error(USAGE);

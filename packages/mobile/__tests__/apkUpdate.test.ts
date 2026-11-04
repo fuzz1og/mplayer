@@ -55,12 +55,18 @@ import {
   downloadAndVerifyApk,
   launchApkInstaller,
   ApkIntegrityError,
+  classifyVerifyFailure,
+  browserFallbackUrl,
+  type ApkAttempt,
 } from '../services/appUpdate';
 import { UPDATE_SOURCE_DEFS } from '@mplayer/core';
 
 const EXPECTED = '0123456789abcdef0123456789abcdef';
 const BAD = 'ffffffffffffffffffffffffffffffff';
 const md5Line = (hash: string = EXPECTED) => `${hash}  MPlayer-v1.9.1.apk\n`;
+const attempt = (status: ApkAttempt['status'], over: Partial<ApkAttempt> = {}): ApkAttempt => ({
+  sourceId: 'x', sourceLabel: '测试源', expectedMd5: null, actualMd5: null, sizeBytes: null, status, message: status, ...over,
+});
 
 const ok = (body: string) => ({ ok: true, status: 200, text: async () => body });
 
@@ -145,12 +151,17 @@ describe('应用内下载 + 校验（#725）', () => {
     expect(h.started).toHaveLength(0);
   });
 
-  it('MD5 不符：删坏包、换下一通道、成功后返回第二通道', async () => {
+  it('MD5 不符：逐源上报损坏原因，删坏包后换通道成功', async () => {
     h.infoQueue.push({ md5: BAD, size: 54975190 });
     h.infoQueue.push({ md5: EXPECTED, size: 54975190 });
-    const report = await downloadAndVerifyApk('1.9.1', 'ghfast');
+    const seen: ApkAttempt[] = [];
+    const report = await downloadAndVerifyApk('1.9.1', 'ghfast', { onAttempt: (a) => seen.push(a) });
     expect(report.sourceId).toBe('gh-proxy');
     expect(report.attempts.map((a) => a.status)).toEqual(['md5-mismatch', 'ok']);
+    expect(seen).toHaveLength(2);
+    expect(seen[0].sourceId).toBe('ghfast');
+    expect(seen[0].message).toContain('损坏');
+    expect(seen[0].message).toContain('换下一通道');
     expect(h.deleteLog).toContain('mplayer-update-ghfast.apk');
     expect(h.downloadLog).toHaveLength(2);
   });
@@ -163,6 +174,7 @@ describe('应用内下载 + 校验（#725）', () => {
     } catch (e) {
       expect(e).toBeInstanceOf(ApkIntegrityError);
       expect((e as ApkIntegrityError).message).toBe('下载文件损坏，请换通道重试');
+      expect((e as ApkIntegrityError).kind).toBe('corrupt');
       expect((e as ApkIntegrityError).attempts).toHaveLength(4);
       expect((e as ApkIntegrityError).attempts.every((a) => a.status === 'md5-mismatch')).toBe(true);
     }
@@ -208,13 +220,67 @@ describe('应用内下载 + 校验（#725）', () => {
     expect(seen).toEqual(['ok']);
   });
 
-  it('.apk.md5 能从 4 个更新源按前缀拼接取到', async () => {
-    stubFetch(async () => ok('<html>无校验文件</html>'));
-    try { await downloadAndVerifyApk('1.9.1', 'auto'); } catch { /* 全部取不到，预期抛错 */ }
+  it('.apk.md5 能从 4 个更新源按前缀拼接取到并完成校验', async () => {
+    stubFetch(async (url) => ok(url.includes('.apk.md5') ? md5Line() : ''));
+    for (let i = 0; i < 3; i += 1) h.infoQueue.push({ md5: BAD, size: 1024 });
+    h.infoQueue.push({ md5: EXPECTED, size: 1024 });
+    const report = await downloadAndVerifyApk('1.9.1', 'auto');
     expect(h.fetchUrls).toHaveLength(4);
     expect(h.fetchUrls.every((u) => u.endsWith('MPlayer-v1.9.1.apk.md5'))).toBe(true);
     expect(new Set(h.fetchUrls.map((u) => new URL(u).hostname)).size).toBe(4);
+    expect(h.downloadLog).toHaveLength(4);
+    expect(report.attempts.every((a) => a.expectedMd5 === EXPECTED)).toBe(true);
+    expect(report.sourceId).toBe('github');
+    expect(report.attempts.map((a) => a.status)).toEqual(['md5-mismatch', 'md5-mismatch', 'md5-mismatch', 'ok']);
+  });
+
+  it('全通道取不到 .apk.md5 时不谎报文件损坏，给校验文件缺失的可读错误', async () => {
+    stubFetch(async () => ok('<html>404</html>'));
+    try {
+      await downloadAndVerifyApk('1.9.1', 'auto');
+      expect.unreachable('必须抛出校验失败');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApkIntegrityError);
+      const err = e as ApkIntegrityError;
+      expect(err.kind).toBe('checksum-unavailable');
+      expect(err.message).toContain('.apk.md5');
+      expect(err.message).not.toContain('文件损坏');
+      expect(err.attempts).toHaveLength(4);
+      expect(err.attempts.every((a) => a.status === 'checksum-unavailable')).toBe(true);
+    }
     expect(h.downloadLog).toHaveLength(0);
+  });
+
+  it('全通道下载失败报下载失败而非文件损坏', async () => {
+    h.downloadFailures.push('MPlayer-v1.9.1.apk');
+    try {
+      await downloadAndVerifyApk('1.9.1', 'auto');
+      expect.unreachable('必须抛出校验失败');
+    } catch (e) {
+      expect(e).toBeInstanceOf(ApkIntegrityError);
+      const err = e as ApkIntegrityError;
+      expect(err.kind).toBe('download-failed');
+      expect(err.message).toContain('下载失败');
+      expect(err.message).not.toContain('文件损坏');
+    }
+  });
+});
+
+
+describe('失败原因分类与旧 release 兜底（#725）', () => {
+  it('只有 MD5 不符归为文件损坏，其余失败各归各类', () => {
+    expect(classifyVerifyFailure([attempt('md5-mismatch')])).toBe('corrupt');
+    expect(classifyVerifyFailure([attempt('checksum-unavailable'), attempt('checksum-unavailable')])).toBe('checksum-unavailable');
+    expect(classifyVerifyFailure([attempt('download-failed')])).toBe('download-failed');
+    expect(classifyVerifyFailure([attempt('info-failed')])).toBe('info-failed');
+    expect(classifyVerifyFailure([attempt('checksum-unavailable'), attempt('download-failed')])).toBe('unavailable');
+    expect(classifyVerifyFailure([attempt('checksum-unavailable'), attempt('md5-mismatch')])).toBe('corrupt');
+  });
+
+  it('旧 release 无校验资产时给出浏览器兜底直链', () => {
+    const url = browserFallbackUrl('1.9.1');
+    expect(url).toContain('MPlayer-v1.9.1.apk');
+    expect(url).toContain('gh-proxy.com');
   });
 });
 

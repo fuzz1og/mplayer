@@ -286,8 +286,7 @@ jobs:
           done
           ls -la apk/release bundle/release
 
-      # #725：生成 md5sum 兼容的 .apk.md5（流式哈希，55MB 不进内存），随 APK 一起上传。
-      # 四个更新源按 buildAssetUrl 的前缀拼接规则取同名资产；镜像缓存行为留待发版期验。
+      # #725：生成 md5sum 兼容的 .apk.md5 随 APK 上传；四源实取一致性留待发版期验。
       - name: Generate APK checksum
         working-directory: packages/mobile/android/app/build/outputs/apk/release
         run: |

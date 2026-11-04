@@ -1,7 +1,4 @@
-/**
- * 回归对象：发布侧 APK 校验资产（#725）——`scripts/apk-md5.mjs` 必须产出 md5sum 兼容的
- * `<32位小写hex>  <文件名>` 行（应用内更新按行首哈希比对），且参数/输入错误 exit 2。
- */
+/** #725：发布侧校验资产脚本产出 md5sum 兼容行；输入/参数错误 exit 2。 */
 
 const { test } = require('node:test');
 const assert = require('node:assert/strict');
@@ -14,16 +11,13 @@ const { spawnSync } = require('node:child_process');
 const REPO_ROOT = path.resolve(__dirname, '..', '..');
 const SCRIPT = path.join(REPO_ROOT, 'scripts', 'apk-md5.mjs');
 
-/** 给文件内容算标准 md5（与脚本用同一算法，作为期望值）。 */
 const md5 = (buf) => createHash('md5').update(buf).digest('hex');
 
-/** 跑被测脚本；cwd 固定为仓库根，避免相对路径随测试进程的工作目录漂移。 */
 function run(args) {
   const res = spawnSync(process.execPath, [SCRIPT, ...args], { encoding: 'utf8', cwd: REPO_ROOT });
   return { status: res.status, stdout: res.stdout || '', stderr: res.stderr || '' };
 }
 
-/** 建临时目录跑一个用例，结束后无条件清理。 */
 function withTempDir(fn) {
   const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'mplayer-apk-md5-'));
   try {
@@ -33,7 +27,6 @@ function withTempDir(fn) {
   }
 }
 
-/** 写一个文件（自动建父目录），返回其路径。 */
 function writeFixture(dir, rel, content) {
   const file = path.join(dir, rel);
   fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -83,14 +76,16 @@ test('空文件也给出标准 md5（d41d8c…）而不是报错', () => {
   });
 });
 
-test('超过 8MB 的文件按流式累积哈希正确（不整读入内存）', () => {
+test('超过 8MB 的文件按流式读取算出正确 md5（不整读入内存）', () => {
   withTempDir((dir) => {
-    // 6MB 重复串 + 2MB 另一串：跨多个 stream chunk，且与单次 update 的期望值可比
     const big = Buffer.concat([Buffer.alloc(6 * 1024 * 1024, 0x61), Buffer.alloc(2 * 1024 * 1024, 0x62)]);
     const file = writeFixture(dir, 'big.apk', big);
     const res = run([file]);
     assert.equal(res.status, 0, res.stdout + res.stderr);
     assert.equal(res.stdout, md5(big) + '  big.apk\n');
+    const source = fs.readFileSync(SCRIPT, 'utf8');
+    assert.match(source, /createReadStream\(/);
+    assert.doesNotMatch(source, /readFileSync/);
   });
 });
 

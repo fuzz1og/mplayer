@@ -58,7 +58,7 @@ Latest builds live on **[Releases](https://github.com/fuzz1og/mplayer/releases/l
 
 The desktop app checks for updates on launch and silently downloads a new version in the background, then confirms in-app before quitting to install; channels are ranked by measured latency — mirrors first (gh-proxy / ghfast / ghproxy.net), GitHub direct last.
 
-Mobile downloads in-app too: the APK lands in the app cache, is verified against the release's `.apk.md5`, and only then handed to the system installer — a corrupted download is rejected with a "retry on another channel" prompt instead of being passed to the browser.
+Mobile downloads in-app too: the APK lands in the app cache and is verified against the release's `.apk.md5`; the settings page shows size and expected/actual hashes for manual confirmation before the system installer opens. Per-source failures are visible, all-source failures get a reason-specific error, and old releases without `.apk.md5` fall back to browser download with an explicit warning.
 
 ## ✨ Features
 
@@ -74,7 +74,7 @@ Mobile downloads in-app too: the APK lands in the app cache, is verified against
 - **📱 Feature parity** — desktop (Electron + React) and mobile (Expo + React Native) share core, so behaviour and data semantics line up
 - **🔒 Background playback and lock-screen controls** — on Android a hand-written Kotlin module (media3 ExoPlayer owning the queue, native progression, `MediaLibraryService` media session) keeps playback alive and mirrors track changes to the notification and lock screen; iOS falls back to expo-audio
 - **🌗 Dark mode** — a dual-theme token system plus `textVariants` on mobile, following the system or switched manually
-- **⚡ Smart updates** — both apps check once on launch; desktop downloads silently and confirms in-app before installing (channels ranked by measured latency, mirrors first, GitHub direct last), mobile downloads and verifies the APK in-app before handing it to the system installer
+- **⚡ Smart updates** — both apps check once on launch; desktop downloads silently and confirms in-app before installing (channels ranked by measured latency, mirrors first, GitHub direct last), mobile downloads and verifies the APK in-app, then waits for manual hash confirmation before handing it to the system installer
 
 **Diagnostics and local files**
 
