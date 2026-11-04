@@ -52,11 +52,13 @@
 | Windows | `MPlayer-Setup-<version>.exe` · `MPlayer-<version>.exe` | NSIS 安装版 / 免安装版 |
 | macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon |
 | Linux | `MPlayer-<version>.AppImage` · `mplayer_<version>_amd64.deb` | x64 |
-| Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.aab` | `.apk` 侧载安装，`.aab` 供商店 |
+| Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.apk.md5` · `MPlayer-v<version>.aab` | `.apk` 侧载安装（`.md5` 是它的校验值），`.aab` 供商店 |
 
 > **桌面端系统要求**：Windows 10 及以上（x64）；macOS 13 (Ventura) 及以上（Intel / Apple Silicon）；Linux x64。macOS 13 的下限来自 Electron 44 内嵌的 Chromium —— 更早的系统上安装包能装但**无法运行**。
 
 桌面端内置应用内更新：进入应用即检查一次，有新版本就后台静默下载，下载完成后应用内确认「立即安装并重启」；下载通道按实测延迟排序——镜像在前（gh-proxy / ghfast / ghproxy.net），GitHub 直连垫底。
+
+移动端同样在应用内下载：APK 落到应用缓存后按 release 附带的 `.apk.md5` 校验，设置页先显示大小与预期/实际哈希供人工核对、确认后才交给系统安装器；单源坏包逐通道可见并自动换源，全源失败按真实原因给可读错误。旧 release 未附带 `.apk.md5` 时明确提示并回退浏览器下载。
 
 ## ✨ 特性
 
@@ -72,7 +74,7 @@
 - **📱 双端一致** — 桌面（Electron + React）与移动端（Expo + React Native）共享 core，功能与数据语义对齐
 - **🔒 后台播放与锁屏控制** — Android 走自写 Kotlin 模块（media3 ExoPlayer 原生持队列 + 原生推进 + `MediaLibraryService` 媒体会话）：后台保活，通知栏与锁屏控制跟随换曲；iOS 回落 expo-audio
 - **🌗 深色模式** — 移动端双主题 token 体系 + textVariants 语义变体，跟随系统或手动切换
-- **⚡ 智能更新** — 双端进入应用即检查一次更新；桌面端静默后台下载 + 应用内确认安装（通道按实测延迟排序，镜像在前、GitHub 直连垫底），移动端弹窗跳浏览器下载
+- **⚡ 智能更新** — 双端进入应用即检查一次更新；桌面端静默后台下载 + 应用内确认安装（通道按实测延迟排序，镜像在前、GitHub 直连垫底），移动端应用内下载 + 校验，人工核对哈希确认后交给系统安装器
 
 **诊断与本地**
 

@@ -49,6 +49,12 @@ vi.mock('../services/playbackTrace', () => ({
 vi.mock('../services/appUpdate', () => ({
   checkLatestRelease: vi.fn(),
   speedTestChannels: vi.fn(async () => []),
+  downloadAndVerifyApk: vi.fn(),
+  launchApkInstaller: vi.fn(),
+  ApkIntegrityError: class ApkIntegrityError extends Error {},
+  formatBytes: vi.fn(() => '未知'),
+  browserFallbackUrl: vi.fn(() => 'https://example.com/MPlayer-v9.9.9.apk'),
+  clearSpeedProbeCache: vi.fn(),
 }));
 
 import { useSettingsStore } from '../stores/settingsStore';
@@ -64,6 +70,7 @@ import UpdateSection from '../components/settings/UpdateSection';
 import SettingsPage from '../app/settings';
 import { ThemeProvider } from '../theme/ThemeProvider';
 import { useSettingsStyles } from '../components/settings/settingsStyles';
+import * as appUpdate from '../services/appUpdate';
 
 /** 各区段 + 一段「挂载后必然出现」的自身文案（证明真的渲染了，不只是没抛异常） */
 const SECTIONS: { name: string; node: ReactNode; text: string }[] = [
@@ -236,5 +243,46 @@ describe('开发者模式开关（#477）：诊断区默认不出现', () => {
 
     expect(screen.getByText(DIAG_EMPTY)).toBeTruthy();
     expect(screen.getByText(LOG_EMPTY)).toBeTruthy();
+  });
+});
+
+describe('更新包校验后人工核对（#725）', () => {
+  it('校验通过先展示大小与预期/实际 MD5，用户确认后才打开安装器', async () => {
+    vi.mocked(appUpdate.checkLatestRelease).mockResolvedValue({
+      state: 'available',
+      version: '9.9.10',
+      releaseNotes: '',
+      apkUrl: 'https://example.com/MPlayer-v9.9.10.apk',
+      sourceLabel: '测试源',
+    });
+    const report = {
+      file: { contentUri: 'content://com.mplayer.mobile.FileSystemFileProvider/cache/x.apk' },
+      sizeBytes: 1024,
+      expectedMd5: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      actualMd5: 'aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa',
+      sourceId: 'ghfast',
+      sourceLabel: '测试源',
+      attempts: [],
+    } as unknown as Awaited<ReturnType<typeof appUpdate.downloadAndVerifyApk>>;
+    vi.mocked(appUpdate.downloadAndVerifyApk).mockResolvedValue(report);
+    render(
+      <ThemeProvider>
+        <UpdateSection />
+      </ThemeProvider>,
+    );
+    await act(async () => {
+      fireEvent.click(screen.getByText('检查更新'));
+    });
+    await act(async () => {
+      fireEvent.click(screen.getByText('立即更新'));
+    });
+    expect(screen.getByText(/安装包大小/)).toBeTruthy();
+    expect(screen.getByText(/预期 MD5/)).toBeTruthy();
+    expect(screen.getByText(/实际 MD5/)).toBeTruthy();
+    expect(appUpdate.launchApkInstaller).not.toHaveBeenCalled();
+    await act(async () => {
+      fireEvent.click(screen.getByText('核对无误，打开安装器'));
+    });
+    expect(appUpdate.launchApkInstaller).toHaveBeenCalledTimes(1);
   });
 });

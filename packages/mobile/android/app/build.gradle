@@ -118,6 +118,8 @@ android {
                 keyAlias System.getenv('ANDROID_KEYSTORE_KEY_ALIAS')
                 keyPassword System.getenv('ANDROID_KEYSTORE_KEY_PASSWORD')
             }
+            // #725：只补 v1（规格要求）；v2 由 AGP 默认开启。
+            enableV1Signing true
         }
     }
     buildTypes {
