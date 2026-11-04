@@ -49,6 +49,10 @@ vi.mock('../services/playbackTrace', () => ({
 vi.mock('../services/appUpdate', () => ({
   checkLatestRelease: vi.fn(),
   speedTestChannels: vi.fn(async () => []),
+  downloadAndVerifyApk: vi.fn(),
+  launchApkInstaller: vi.fn(),
+  ApkIntegrityError: class ApkIntegrityError extends Error {},
+  formatBytes: vi.fn(() => '未知'),
 }));
 
 import { useSettingsStore } from '../stores/settingsStore';

@@ -286,11 +286,24 @@ jobs:
           done
           ls -la apk/release bundle/release
 
+      # #725：生成 md5sum 兼容的 .apk.md5（流式哈希，55MB 不进内存），随 APK 一起上传。
+      # 四个更新源按 buildAssetUrl 的前缀拼接规则取同名资产；镜像缓存行为留待发版期验。
+      - name: Generate APK checksum
+        working-directory: packages/mobile/android/app/build/outputs/apk/release
+        run: |
+          for apk in *.apk; do
+            [ -f "$apk" ] || continue
+            node "${{ github.workspace }}/scripts/apk-md5.mjs" "$apk" --out "$apk.md5"
+            cat "$apk.md5"
+          done
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v7
         with:
           name: mplayer-mobile-apk
-          path: packages/mobile/android/app/build/outputs/apk/release/*.apk
+          path: |
+            packages/mobile/android/app/build/outputs/apk/release/*.apk
+            packages/mobile/android/app/build/outputs/apk/release/*.apk.md5
           if-no-files-found: error
 
       - name: Upload AAB artifact
@@ -382,7 +395,7 @@ jobs:
           # + mobile APK/AAB（AAB 供上架 Google Play 使用，P3-8）。
           # 统一在此上传，避免与 electron-builder 的 --publish always 竞争。
           # 注意：只遍历产物目录，绝不要包含 "."（会把仓库根目录源文件误传）。
-          for dir in desktop-linux desktop-mac desktop-win ./*.apk ./*.aab; do
+          for dir in desktop-linux desktop-mac desktop-win ./*.apk ./*.apk.md5 ./*.aab; do
             if [ -d "$dir" ]; then
               for f in "$dir"/*; do
                 [ -f "$f" ] && gh release upload "$TAG" "$f" --clobber || true

@@ -52,11 +52,13 @@ Latest builds live on **[Releases](https://github.com/fuzz1og/mplayer/releases/l
 | Windows | `MPlayer-Setup-<version>.exe` · `MPlayer-<version>.exe` | NSIS installer / portable |
 | macOS | `MPlayer-<version>.dmg` · `MPlayer-<version>-arm64.dmg` | Intel / Apple Silicon · **macOS 13 (Ventura) or later required** |
 | Linux | `MPlayer-<version>.AppImage` · `mplayer_<version>_amd64.deb` | x64 |
-| Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.aab` | `.apk` for sideloading, `.aab` for stores |
+| Android | `MPlayer-v<version>.apk` · `MPlayer-v<version>.apk.md5` · `MPlayer-v<version>.aab` | `.apk` for sideloading (`.md5` is its checksum), `.aab` for stores |
 
 > **Desktop system requirements**: Windows 10 or later (x64); macOS 13 (Ventura) or later (Intel / Apple Silicon); Linux x64. The macOS floor comes from the Chromium embedded in Electron 44: on older systems the installer still installs but the app **will not run**.
 
 The desktop app checks for updates on launch and silently downloads a new version in the background, then confirms in-app before quitting to install; channels are ranked by measured latency — mirrors first (gh-proxy / ghfast / ghproxy.net), GitHub direct last.
+
+Mobile downloads in-app too: the APK lands in the app cache, is verified against the release's `.apk.md5`, and only then handed to the system installer — a corrupted download is rejected with a "retry on another channel" prompt instead of being passed to the browser.
 
 ## ✨ Features
 
@@ -72,7 +74,7 @@ The desktop app checks for updates on launch and silently downloads a new versio
 - **📱 Feature parity** — desktop (Electron + React) and mobile (Expo + React Native) share core, so behaviour and data semantics line up
 - **🔒 Background playback and lock-screen controls** — on Android a hand-written Kotlin module (media3 ExoPlayer owning the queue, native progression, `MediaLibraryService` media session) keeps playback alive and mirrors track changes to the notification and lock screen; iOS falls back to expo-audio
 - **🌗 Dark mode** — a dual-theme token system plus `textVariants` on mobile, following the system or switched manually
-- **⚡ Smart updates** — both apps check once on launch; desktop downloads silently and confirms in-app before installing (channels ranked by measured latency, mirrors first, GitHub direct last), mobile hands the browser the APK link
+- **⚡ Smart updates** — both apps check once on launch; desktop downloads silently and confirms in-app before installing (channels ranked by measured latency, mirrors first, GitHub direct last), mobile downloads and verifies the APK in-app before handing it to the system installer
 
 **Diagnostics and local files**
 
