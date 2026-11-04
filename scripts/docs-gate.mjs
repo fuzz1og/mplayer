@@ -37,7 +37,8 @@ const TABLE_DOC = 'docs/agents/architecture.md';
 /** 有意不记进文件表的实现文件（repo 相对路径）。留空是常态；进这里要写明为什么。 */
 const TABLE_ALLOW = new Set([]);
 
-const SKIP_DIRS = new Set(['node_modules', '__tests__', '__mocks__', 'dist', '.git']);
+/** .agents/worktrees 是会话工作区副本，不是仓库内容：CI 全新检出不存在，扫它只会把旧存档的 shim 写法误报成违规。 */
+const SKIP_DIRS = new Set(['node_modules', '__tests__', '__mocks__', 'dist', '.git', 'worktrees']);
 
 function walkFiles(absDir, ext, out = []) {
   for (const entry of readdirSync(absDir, { withFileTypes: true })) {
