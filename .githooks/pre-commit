@@ -7,6 +7,9 @@ echo "→ comment-gate / claim-lint..."
 node scripts/comment-gate.mjs
 node scripts/claim-lint.mjs
 
+echo "→ privacy (staged)..."
+node scripts/check-privacy.mjs --staged
+
 echo "→ root typecheck..."
 npx tsc --noEmit
 
