@@ -44,8 +44,8 @@
   },
   "dependencies": {
     "buffer": "^6.0.3",
-    "electron-updater": "^6.8.9",
-    "mp3tag.js": "^3.17.0",
+    "electron-updater": "^6.8.11",
+    "mp3tag.js": "^3.17.1",
     "music-metadata": "^11.16.1"
   },
   "overrides": {
