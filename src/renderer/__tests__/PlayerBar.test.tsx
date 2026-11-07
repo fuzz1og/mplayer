@@ -130,6 +130,14 @@ describe('PlayerBar', () => {
     expect(playerBarCss).toContain('.player-volume:focus-within .player-volume__popover');
   });
 
+  it('图标与浮层之间的空隙是 hover 命中区：指针移向滑杆时不断档', () => {
+    const bridge = cssBlock('.player-volume::before');
+    expect(bridge).toContain('position: absolute');
+    expect(bridge).toContain('right: 100%');
+    expect(bridge).toContain('width: var(--space-2)');
+    expect(cssBlock('.player-volume__popover')).toContain('right: calc(100% + var(--space-2))');
+  });
+
   it('静音点击保留：音量 80 → 0', () => {
     render(<PlayerBar />);
     fireEvent.click(screen.getByRole('button', { name: '静音' }));
