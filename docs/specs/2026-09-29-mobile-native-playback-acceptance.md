@@ -7,7 +7,7 @@
 
 | 项 | 值 |
 | --- | --- |
-| 设备 | OnePlus PKB110 · Android 16 / ColorOS 16 · 1256×2760@560dpi · `adb` 序列号 `N7TOAIMFOJPFIV7D` |
+| 设备 | OnePlus PKB110 · Android 16 / ColorOS 16 · 1256×2760@560dpi · `adb` 序列号（由 `adb devices` 读取，不入库） |
 | 已装包 | `com.mplayer.mobile`（1.8.4 release）、`com.mplayer.mobile.dev`（1.8.4-dev，由 PR #435 构建，2026-09-27 装机） |
 | 引擎 | **Expo Go 不可用**（方案 C 是原生模块，`isExpoGo` 分支 + 插件不生效）→ 必须 dev build / release APK |
 

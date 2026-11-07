@@ -97,7 +97,7 @@
 | A | `expo start --port N` → `reverse` → `force-stop` → `am start exp://` | **9** | `mobile-debug.mjs` 覆盖 4 步，但 A/B 回路**无人调用**；它缺 dev build 的 `mplayer://expo-development-client` 拉起分支 |
 | B | `uiautomator dump` → `pull` → 解析**单行 XML** 取 `bounds` → `input tap` | **8** | 每个会话各写一份临时解析器；`3845c916` 因读不存在的 `ui13.xml` 崩过一次 |
 | C | dev build：`gradlew` → `push`/`pm install` → `reverse` → 显式组件拉起 → 三条 `dumpsys` 自检 | **6** | 已在 PR **#582** 脚本化，但 **0 次真机运行** |
-| D | adb server 抢救（找占用者 → 杀光 → 起 scoop 那个 → 重建 reverse） | 4–5 | 纯手打 |
+| D | adb server 抢救（找占用者 → 杀光 → 起统一解析的那份 adb → 重建 reverse） | 4–5 | 纯手打 |
 | E | 截图 → `gh pr comment --attach` → 读回正文验引用 | **7** | 纯手打；`--attach` 28 次调用 **0 失败**（别为它加机制） |
 
 ## 4. 建议的目标形态

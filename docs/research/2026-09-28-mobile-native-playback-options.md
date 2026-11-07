@@ -31,7 +31,7 @@
 ## 第一部分 · 仓库改动面清点（两条路共同的事实基础）
 
 
-范围：仅清点 `D:\Playground\mplayer`（master `d4897fe`）的**仓库改动面**——哪些文件、哪些行、动多少。
+范围：仅清点仓库检出根目录（`git rev-parse --show-toplevel`，master `d4897fe`）的**仓库改动面**——哪些文件、哪些行、动多少。
 本文件不评价两条路线的优劣（那是 B/C 评估正文的事），只给「要动哪些文件」的可核对事实。
 所有行号均来自 master 工作副本实测；未落地的推断一律标注「（不确定/推断）」。
 
@@ -708,7 +708,7 @@ V5 的 `license.txt` 原文：免费仅限 "use by a private individual solely f
 
 
 > 评估对象：**#405「App 在后台时曲末不自动切下一首」的正解路径 D——自写 Kotlin Expo Module，由原生持有队列并原生推进**。
-> 口径：平台/Expo 结论取官方文档与官方源码；仓库结论取当前工作副本 `D:\Playground\mplayer`（master `d4897fe`）与已安装依赖源码，全部给 `file:line`；能实测的都实测了（autolinking 探针、Gradle 缓存核查、RN autolinking 输出）。
+> 口径：平台/Expo 结论取官方文档与官方源码；仓库结论取仓库检出根目录（`git rev-parse --show-toplevel`，master `d4897fe`）与已安装依赖源码，全部给 `file:line`；能实测的都实测了（autolinking 探针、Gradle 缓存核查、RN autolinking 输出）。
 > 不裁决：本文件只回答「这条路的落地足迹有多大、怎么接、风险在哪」，不评价它是否该走（见 `docs/research/2026-09-27-android-background-playback.md` 的候选路径对比）。
 > 前提（沿用三份评估共用背景，不再重复论证）：expo-audio 后台不向 JS 投递状态事件 → **任何 JS 侧推进都不可能**，必须原生持有队列 + JS 活着时预解析 N 首直链喂原生。
 

@@ -1,4 +1,6 @@
 import { test, expect } from '@playwright/test';
+import os from 'node:os';
+import path from 'node:path';
 
 /** 1.9.0 UI 验收截图（Chromium + electronAPI stub，非真实 Electron）。用法：npx playwright test 本文件 --workers=1 */
 const ROUTES: Array<[string, string, string]> = [
@@ -18,9 +20,11 @@ const ROUTES: Array<[string, string, string]> = [
   ['ui-15-playlist', '/#/playlist/7', '歌单详情'],
 ];
 
+const cacheDir = path.join(os.tmpdir(), 'mplayer-e2e', 'cache');
+
 test.beforeEach(async ({ page }) => {
   // 渲染层只经 window.electronAPI 通信：给最小 stub，让页面不因缺桥而白屏
-  await page.addInitScript(() => {
+  await page.addInitScript((cacheDir: string) => {
     const noop = async () => undefined;
     const song = (i: number) => ({ id: 'n' + i, name: '示例歌曲 ' + i, artist: '示例歌手', album: '示例专辑', duration: 240, sourceType: 'netease', url: '', cover: '', lrc: '' });
     const songs = Array.from({ length: 12 }, (_, i) => song(i + 1));
@@ -53,7 +57,7 @@ test.beforeEach(async ({ page }) => {
         if (channel === 'getArtists') return { artists: [], more: false };
         // 缓存页截图要有非零数据：否则「按类型清理」按钮全是 disabled，看不出改动。
         if (channel === 'cache:getStats') return { totalSize: 52 * 1024 * 1024, fileCount: 120, songsCount: 50, coversCount: 50, audioCount: 20, urlsCount: 0, bytes: { songs: 3 * 1024 * 1024, urls: 0, covers: 20 * 1024 * 1024, audio: 29 * 1024 * 1024, other: 0 } };
-        if (channel === 'cache:getConfig') return { limitMb: 100, autoClean: true, stepMb: 20, minMb: 20, maxMb: 4096, dir: 'C:/Users/Admin/AppData/Roaming/MPlayer/cache' };
+        if (channel === 'cache:getConfig') return { limitMb: 100, autoClean: true, stepMb: 20, minMb: 20, maxMb: 4096, dir: cacheDir };
         if (channel === 'settings:getTier3State') return { enabled: false, subscriptions: [] };
         return undefined;
       },
@@ -61,7 +65,7 @@ test.beforeEach(async ({ page }) => {
       removeListener: noop,
       send: noop,
     };
-  });
+  }, cacheDir);
 });
 
 for (const [name, route, label] of ROUTES) {

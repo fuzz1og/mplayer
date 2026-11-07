@@ -65,13 +65,16 @@ jobs:
     timeout-minutes: 10
     steps:
       - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
       - uses: actions/setup-node@v7
         with:
           node-version: 22
           cache: npm
       - run: npm ci --ignore-scripts
-      # expo 分片的失败自分类要拿 origin/master...HEAD 的 diff（没碰依赖文件即判上游漂移）
-      - run: git fetch --no-tags --depth=1 origin +refs/heads/master:refs/remotes/origin/master
+      # expo 分片的失败自分类要拿 origin/master...HEAD 的 diff（没碰依赖文件即判上游漂移）；
+      # 浅克隆算不出 merge base，所以 checkout 取完整历史，这里只更新基线引用。
+      - run: git fetch --no-tags origin +refs/heads/master:refs/remotes/origin/master
       - run: ./scripts/verify.sh expo
 
   # Windows 分片：验证入口本身在维护者平台（Windows）上成立。#500（WSL 的 bash 解析到 Linux node）

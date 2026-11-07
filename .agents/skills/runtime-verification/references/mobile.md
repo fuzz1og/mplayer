@@ -10,11 +10,11 @@
 
 | 回路 | 何时用 | 入口 |
 |---|---|---|
-| **A · 雷电模拟器**（默认优先） | 会话跑在 Windows、验 UI / 渲染 / JS 层 | `D:\leidian\LDPlayer14\ldconsole.exe`（`C:\leidian` 是空壳） |
-| **B · Windows 原生 adb** | 要真实机型 / 网络 / 原生能力 | `C:\Users\<用户名>\scoop\apps\android-clt\current\platform-tools\adb.exe` |
+| **A · 雷电模拟器**（默认优先） | 会话跑在 Windows、验 UI / 渲染 / JS 层 | `MOBILE_LDCONSOLE` 指定 `ldconsole`；未设时从 PATH 解析（安装目录由本机安装器决定，不写死） |
+| **B · Windows 原生 adb** | 要真实机型 / 网络 / 原生能力 | `MOBILE_ADB` → `$ANDROID_HOME/platform-tools/adb` → PATH 上的 `adb`，按序自动解析 |
 | **C · WSL + usbipd** | 在 WSL 里开发时 | `node scripts/mobile-device/usb-attach.mjs` → `node scripts/mobile-debug.mjs` |
 
-回路 C 的前提：手机 USB 经 usbipd-win 直挂进 WSL，**全系统只有一个 adb server**——WSL 原生版（udev 规则 `/etc/udev/rules.d/51-android-usbip.rules`），Windows 侧一律不用。**本机（DSH 跑在 Windows）实际走 A/B**：usbipd 里手机显示 `Shared`（未 attach）是正常的，别 attach 进 WSL。
+回路 C 的前提：手机 USB 经 usbipd-win 直挂进 WSL，**全系统只有一个 adb server**——WSL 原生版（udev 规则 `/etc/udev/rules.d/51-android-usbip.rules`），Windows 侧一律不用。**Windows 会话实际走 A/B**：usbipd 里手机显示 `Shared`（未 attach）是正常的，别 attach 进 WSL。
 
 ## 标准流程
 
@@ -136,7 +136,7 @@ node .agents/skills/runtime-verification/scripts/dev-build.mjs
 
 ### 设备连接
 
-- **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输 / MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（`/mnt/c/Users/<用户名>/scoop/shims/adb.exe kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 `usb-attach.mjs`。
+- **attach 报 `Device busy (exported)`**：Windows 正占用设备。两个来源：手机处于「文件传输 / MTP」模式（下拉通知切成「仅充电」，USB 调试保持开）；或另一条回路的 adb 被拉起（用 `MOBILE_ADB` / PATH 上同一份 adb 执行 `adb kill-server`）。切换 USB 模式会让设备重新枚举，bind 可能要重做——重跑 `usb-attach.mjs`。
 - **之前能用，突然 `no devices`**：usbipd 透传掉了（拔插、省电、重新枚举都会）。重跑 `usb-attach.mjs` 即可。
 - **模拟器实例掉线 / 报废**（不只是 usbipd 掉线）：雷电实例会自己从 `adb devices` 里消失或变 `offline`，`ldconsole quit` 再 `launch --index <i>` 常常**起不回来**（adbd 不回来）。重建：`ldconsole add --name <n>` + `launch --index <i>`；**端口 = 5555 + 2×index**（index 1 → 5557），且**新实例默认 720×1280**，坐标要重新 `wm size` 取。特例：**飞行模式会连 adb 一起断且不可恢复**（`cmd connectivity airplane-mode enable` 后 `adb shell` 立即返空、`127.0.0.1:5555` 变 offline）——**断网类验收一律走真机 USB**（`svc wifi disable && svc data disable` 不影响 USB adb）。
 
@@ -158,7 +158,7 @@ node .agents/skills/runtime-verification/scripts/dev-build.mjs
 - **多会话共抢一台手机**：其他 worktree 会话可能也在调试（各自 Metro 占 8082 等端口、互相拉起 App）。`adb kill-server` 会打掉**所有人**的 reverse 隧道——动过 server 后跑 `adb reverse --list` 确认自己的端口还在，App 的 `initialUri` 要指向自己的端口。
 - **归属对照：同一台设备上再起一个 Metro（8082）跑 master**：分支上某控件不响应 / 行为可疑时，用 master 的 bundle 复现一次（`adb reverse tcp:8082 tcp:8082` → `am start … exp://127.0.0.1:8082`），就能把「本 PR 引入」与「既有行为」分开——#514 的长按吞手势就是这样定性为既有模式（对照图进了 PR 评论）。用完记得 `adb reverse tcp:8081 tcp:8081` 切回自己的端口并冷启。
 - **双 transport 串线**：设备同时挂 USB + 无线两条 transport 时 reverse 静默不通（App 拉起但 JS 永远不跑、Metro 无 bundling 记录）。修法：`adb disconnect` 只留 USB，重建 reverse，冷启。`mobile-debug.mjs` 已内置该检查。
-- **adb server / 5037 争抢（同一处置的三个子情形）**：症状是任何 `adb` 命令挂住、`adb devices` 超时，或 80MB 的 `adb install` 把 server 卡死。① 雷电自带 `D:\leidian\LDPlayer14\adb.exe` 与 scoop 的 `…\scoop\shims\adb.exe` 都会抢 5037，多个 server 互踢；② `adb install` 走流式安装，比 `adb push` + `adb shell pm install -r` 脆弱得多；③ **daemon 重启会清空所有 reverse 隧道**（实测别的会话的 daemon 崩掉，把 8099 一起带走）。处置：**杀光所有 adb 进程 → 只用一份 `adb start-server`（scoop 的 `android-clt` 或 WSL 侧 `~/.local/bin/adb`）→ 重新 `adb reverse`**；查占用者 `Get-NetTCPConnection -LocalPort 5037 -State Listen`；装包改 `adb push` + `pm install -r`；「App 突然连不上 Metro」先查 `adb reverse --list`，别先怀疑 App。**别** `adb connect 127.0.0.1:5555`——会造出同一台设备的**重复 transport**。
+- **adb server / 5037 争抢（同一处置的三个子情形）**：症状是任何 `adb` 命令挂住、`adb devices` 超时，或 80MB 的 `adb install` 把 server 卡死。① 模拟器自带的 adb 与 SDK / PATH 上的另一份 adb 都会抢 5037，多个 server 互踢；② `adb install` 走流式安装，比 `adb push` + `adb shell pm install -r` 脆弱得多；③ **daemon 重启会清空所有 reverse 隧道**（实测别的会话的 daemon 崩掉，把 8099 一起带走）。处置：**杀光所有 adb 进程 → 只用一份 `adb start-server`（统一由 `MOBILE_ADB` / `$ANDROID_HOME` / PATH 解析）→ 重新 `adb reverse`**；查占用者 `Get-NetTCPConnection -LocalPort 5037 -State Listen`；装包改 `adb push` + `pm install -r`；「App 突然连不上 Metro」先查 `adb reverse --list`，别先怀疑 App。**别** `adb connect 127.0.0.1:5555`——会造出同一台设备的**重复 transport**。
 
 ### 构建产物
 

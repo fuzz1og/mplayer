@@ -81,7 +81,7 @@ export function gradleExecutable(platform = process.platform) {
 /**
  * `MOBILE_ADB` 的语义（#582 评审第 8 条）：**只钉死二进制路径**。
  *
- * 本机常见「雷电自带 adb 与 scoop 的抢 5037」——多份 adb 互相踢 server 时，用这个变量
+ * 常见的是「模拟器自带的 adb 与 SDK / PATH 上的另一份抢 5037」——两份并存时，用这个变量
  * 选定**用哪一份**，仅此而已。这里**不**做争抢检测、不做重试、不做选主：5037 的诊断与
  * 处置在 `adbHangHint()`（`Get-NetTCPConnection -LocalPort 5037` → 认 pid → 只留一份 →
  * 重建 reverse）。想「自动处置争抢」的读者别在这儿加逻辑 —— 那属于 `adbHangHint` 的文案面。
@@ -177,10 +177,10 @@ export function classifySpawnFailure(res) {
   return { kind: 'spawn', code, message };
 }
 
-/** adb 卡死时的处置文案（缺陷 2）。本机最常见的成因是「两份 adb 抢 5037」。 */
+/** adb 卡死时的处置文案（缺陷 2）。最常见的成因是「两份 adb 抢 5037」。 */
 export function adbHangHint(timeoutMs = DEFAULT_ADB_TIMEOUT_MS, port = DEV_BUILD.port) {
   return `adb 命令 ${timeoutMs}ms 没返回，已放弃等待。`
-    + `\n本机最常见的成因：**两份 adb 抢 5037**（雷电/SDK 自带一份，scoop/PATH 上一份），两个 server 互踢，`
+    + `\n最常见的成因：**两份 adb 抢 5037**（模拟器 / SDK 自带一份，PATH 上一份），两个 server 互踢，`
     + `每个 adb 调用都会挂住 —— 表现为「脚本卡死」而不是报错。`
     + `\n处置（PowerShell，按序做）：`
     + `\n  1) 看谁占着 5037：Get-NetTCPConnection -LocalPort 5037 -State Listen | Select-Object OwningProcess`
