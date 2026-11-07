@@ -51,6 +51,7 @@ const OWNERSHIP: Record<string, string[]> = {
     'components/ChartPanel.tsx',
     'components/CollectionGrid.tsx',
     'components/DownloadProgressModal.tsx',
+    'components/DjRadioGrid.tsx',
     'components/ErrorBoundary.tsx',
     'components/GroupedSongList.tsx',
     'components/LyricsDisplay.tsx',
@@ -66,6 +67,7 @@ const OWNERSHIP: Record<string, string[]> = {
     'components/VirtualSortableList.tsx',
     'pages/AlbumDetailPage.tsx',
     'pages/ArtistDetailPage.tsx',
+    'pages/DjRadioDetailPage.tsx',
     'pages/ArtistListPage.tsx',
     'pages/FavoritesPage.tsx',
     'pages/HistoryPage.tsx',
@@ -83,6 +85,7 @@ const OWNERSHIP: Record<string, string[]> = {
   'styles/detail-page.css': [
     'pages/AlbumDetailPage.tsx',
     'pages/ArtistDetailPage.tsx',
+    'pages/DjRadioDetailPage.tsx',
     'pages/DiscoverPlaylistDetailPage.tsx',
     'pages/HotlistDetailPage.tsx',
     'pages/PlaylistDetailPage.tsx',

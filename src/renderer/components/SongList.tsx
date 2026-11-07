@@ -72,6 +72,8 @@ interface SongListProps {
   showDuration?: boolean;
   /** 专辑列：缺省按「列表里是否有专辑」自动决定；详情页传 false 收掉整列（不重复整行相同专辑名） */
   showAlbum?: boolean;
+  /** 自定义序号文案（电台节目期号等）；缺省显示 index + 1。 */
+  indexLabel?: (song: Song, index: number) => React.ReactNode;
 }
 
 /**
@@ -109,6 +111,7 @@ const SongList: React.FC<SongListProps> = ({
   onCoverError,
   showDuration = false,
   showAlbum,
+  indexLabel,
 }) => {
   // library 密度默认无表头；显式 showHeader 才渲染
   const showHeader = showHeaderProp ?? density !== 'library';
@@ -299,6 +302,7 @@ const SongList: React.FC<SongListProps> = ({
       isPlaying={isPlaying ?? false}
       isFavorite={favoriteIdSet.has(song.id)}
       showIndex={showIndex}
+      indexLabel={indexLabel?.(song, index)}
       showCheckbox={showCheckbox || batchMode}
       isSelected={selectedIdSet.has(song.id)}
       showRemoveFromPlaylist={showRemoveFromPlaylist}

@@ -10,8 +10,16 @@ import {
 import ScalePress from '../../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { ChevronRight, Disc3 } from 'lucide-react-native';
-import { getArtistInfoRouted, getDirectClient, type Artist, type Song, type Album } from '@mplayer/core';
+import { ChevronRight, Disc3, Radio } from 'lucide-react-native';
+import {
+  getArtistInfoRouted,
+  getArtistRadiosRouted,
+  getDirectClient,
+  type Artist,
+  type Song,
+  type Album,
+  type DjRadio,
+} from '@mplayer/core';
 import SongListSkeleton from '../../../components/SongListSkeleton';
 import LoadMoreFooter from '../../../components/LoadMoreFooter';
 import SongRow from '../../../components/SongRow';
@@ -50,6 +58,7 @@ export default function ArtistDetailPage() {
   const [albumsTotal, setAlbumsTotal] = useState<number | null>(null);
   const [albumsError, setAlbumsError] = useState(false);
   const [albumReloadKey, setAlbumReloadKey] = useState(0);
+  const [radios, setRadios] = useState<DjRadio[]>([]);
 
   // 入口带来的名字/头像先出（零请求），按 id 校正后再覆盖
   const displayName = artist?.name || name || '歌手';
@@ -116,6 +125,27 @@ export default function ArtistDetailPage() {
     return () => { cancelled = true; };
   }, [id, albumReloadKey]);
 
+  // 歌手电台（#742）：accountId 只对入驻艺人存在；失败/空结果整块隐藏。
+  useEffect(() => {
+    const accountId = artist?.accountId;
+    setRadios([]);
+    if (!accountId) {
+      return;
+    }
+    let cancelled = false;
+    getArtistRadiosRouted('netease', accountId)
+      .then((outcome) => {
+        if (!cancelled) setRadios(outcome.ok ? outcome.page.radios : []);
+      })
+      .catch((e) => {
+        if (!cancelled) {
+          console.error('[ArtistDetail] radios error:', e);
+          setRadios([]);
+        }
+      });
+    return () => { cancelled = true; };
+  }, [artist?.accountId]);
+
   // 「查看全部专辑」（#417 P0.1）：时间线页按年份分区 + 纵向滚动看全部，横滑条放不下 243 张
   const openAllAlbums = useCallback(() => {
     if (!id) return;
@@ -160,6 +190,28 @@ export default function ArtistDetailPage() {
     [styles, colors.textTertiary],
   );
 
+  const renderRadioCard = useCallback(
+    ({ item: r }: { item: DjRadio }) => (
+      <ScalePress
+        style={styles.albumCard}
+        onPress={() => router.push(`/djradio/${r.id}?name=${encodeURIComponent(r.name)}&pic=${encodeURIComponent(r.picUrl || '')}&dj=${encodeURIComponent(r.dj.nickname || '')}` as any)}
+      >
+        {r.picUrl ? (
+          <LazyCover uri={r.picUrl} style={styles.albumCover} />
+        ) : (
+          <View style={[styles.albumCover, styles.albumCoverFallback]}>
+            <Radio size={24} color={colors.textTertiary} />
+          </View>
+        )}
+        <Text style={styles.albumName} numberOfLines={1}>{r.name}</Text>
+        <Text style={styles.radioMeta} numberOfLines={1}>
+          {r.dj.nickname}{r.programCount ? ` · ${r.programCount} 期` : ''}
+        </Text>
+      </ScalePress>
+    ),
+    [styles, colors.textTertiary],
+  );
+
   const albumsHeader = (
     <View style={styles.albumsSection}>
       <View style={styles.albumsTitleRow}>
@@ -191,6 +243,21 @@ export default function ArtistDetailPage() {
           windowSize={3}
         />
       )}
+      {radios.length > 0 ? (
+        <View style={styles.radiosSection}>
+          <Text style={styles.albumsTitle}>电台 · {radios.length} 个</Text>
+          <FlatList
+            horizontal
+            data={radios}
+            keyExtractor={(item) => item.id}
+            renderItem={renderRadioCard}
+            showsHorizontalScrollIndicator={false}
+            initialNumToRender={4}
+            maxToRenderPerBatch={4}
+            windowSize={3}
+          />
+        </View>
+      ) : null}
     </View>
   );
 
@@ -235,6 +302,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   flex: { flex: 1 },
   albumsSection: { paddingTop: spacing[3], paddingBottom: spacing[2], paddingLeft: spacing[4] },
+  radiosSection: { marginTop: spacing[4] },
   albumsTitleRow: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -264,6 +332,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
   albumCoverFallback: { justifyContent: 'center', alignItems: 'center' },
   albumName: { ...textVariants.caption, color: colors.textTertiary, marginTop: 6 },
+  radioMeta: { ...textVariants.caption, color: colors.textTertiary, marginTop: 2 },
   avatarFallback: { color: colors.textInverse, fontSize: 56, fontWeight: typography.weights.bold },
   empty: { paddingVertical: 60, alignItems: 'center' },
   emptyText: { ...textVariants.callout, color: colors.textSecondary },
