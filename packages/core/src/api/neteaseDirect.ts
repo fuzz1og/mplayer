@@ -1,4 +1,14 @@
-import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song } from '../types/index.js';
+import type {
+  Album,
+  AlbumDetail,
+  Artist,
+  DiscoverPlaylist,
+  DjRadio,
+  DjRadioListPage,
+  DjRadioProgram,
+  DjRadioProgramsPage,
+  Song,
+} from '../types/index.js';
 import type { ArtistAlbumsPage, ContentCache, DirectSourceClient, ToplistDetail, ToplistGroup } from '../shared/sourceRouter.js';
 import type { UrlInfo } from '../shared/playability.js';
 import { normalizePublishTime } from '../utils/publishTime.js';
@@ -22,7 +32,15 @@ const CLOUDSEARCH_MAX_LIMIT = 100;
 const CLOUDSEARCH_TYPE_SONG = 1;
 const CLOUDSEARCH_TYPE_ARTIST = 100;
 const CLOUDSEARCH_TYPE_PLAYLIST = 1000;
+const CLOUDSEARCH_TYPE_DJRADIO = 1009;
 const LYRIC_URL = 'https://music.163.com/api/song/lyric';
+const DJRADIO_DETAIL_URL = 'https://music.163.com/api/djradio/v2/get';
+const DJRADIO_PROGRAMS_URL = 'https://music.163.com/api/dj/program/byradio';
+const DJRADIO_BY_USER_URL = 'https://music.163.com/api/djradio/get/byuser';
+
+/** 网易电台搜索上游只回 top 10；limit 实测不生效，UI 不做分页。 */
+const DJRADIO_SEARCH_LIMIT = 10;
+const DJRADIO_TTL_MS = 10 * 60 * 1000;
 
 // ── 缓存 TTL（对齐门面旧语义）──────────────────────────────────────
 const TOPLIST_TTL_MS = 24 * 60 * 60 * 1000;      // 榜单 1 天（原 hotlist 缓存）
@@ -88,6 +106,33 @@ async function plaintextGetJson<T>(url: string, options?: TransportCallOptions):
   return JSON.parse(text) as T;
 }
 
+/** 明文 POST form → JSON（网易 djradio 腿；不加密、不新增 Cookie）。 */
+async function plaintextPostJson<T>(
+  url: string,
+  body: Record<string, string | number | boolean | undefined>,
+  options?: TransportCallOptions,
+): Promise<T> {
+  const params = new URLSearchParams();
+  for (const [key, value] of Object.entries(body)) {
+    if (value !== undefined) params.set(key, String(value));
+  }
+  const res = await request({
+    method: 'POST',
+    url,
+    headers: {
+      ...PLAINTEXT_HEADERS,
+      'content-type': 'application/x-www-form-urlencoded',
+    },
+    body: params.toString(),
+    timeoutMs: cappedRequestTimeout(8000, options),
+    signal: options?.signal,
+  });
+  if (res.status >= 400) {
+    throw new Error(`网易明文接口 HTTP ${res.status}: ${url}`);
+  }
+  return JSON.parse(bodyToText(res.body)) as T;
+}
+
 /** cloudsearch 返回的网易原生 track → Song（字段映射对齐门面 processNeteaseTrack）。 */
 function mapTrack(t: any): Song {
   const artists = t.ar || t.artists || [];
@@ -143,6 +188,7 @@ function mapArtist(a: any): Artist {
     albumSize: a.albumSize || 0,
     musicSize: a.musicSize || 0,
     sourceType: 'netease',
+    accountId: a.accountId != null ? String(a.accountId) : undefined,
   };
 }
 
@@ -158,6 +204,33 @@ const playlistSearchInflight = new Map<
   string,
   Promise<{ playlists: DiscoverPlaylist[]; total: number; more: boolean }>
 >();
+const djRadioDetailInflight = new Map<string, Promise<DjRadio | null>>();
+const djRadioProgramsInflight = new Map<string, Promise<DjRadioProgramsPage>>();
+const artistRadiosInflight = new Map<string, Promise<DjRadioListPage>>();
+const djRadioSearchInflight = new Map<string, Promise<DjRadio[]>>();
+
+/** 同键并发只打一发；底层 promise 结算后才出表，迟到调用仍能 join。 */
+function joinInflight<T>(
+  table: Map<string, Promise<T>>,
+  key: string,
+  run: () => Promise<T>,
+): Promise<T> {
+  const existing = table.get(key);
+  if (existing) return existing;
+  const pending = Promise.resolve().then(run).finally(() => {
+    table.delete(key);
+  });
+  table.set(key, pending);
+  return pending;
+}
+
+/** 网易 djradio 的 body.code 错误：405/406 是限流，不能与空结果或 404 混用。 */
+function djRadioError(operation: string, payload: any): Error {
+  const code = Number(payload?.code) || 0;
+  const upstream = payload?.msg || payload?.message || '';
+  const hint = code === 405 || code === 406 ? '操作频繁，请稍后重试' : upstream;
+  return new Error(`${operation}失败 (code=${code}${hint ? `, ${hint}` : ''})`);
+}
 
 /** 兜底：旧明文接口（无加密）获取网易云歌单，返回 playlist 对象或 null。 */
 async function fetchNeteasePlaylistLegacy(playlistId: number): Promise<any | null> {
@@ -277,7 +350,10 @@ async function cloudsearchSearch(
   }
   const data = JSON.parse(res.body) as { code: number; message?: string; result?: any };
   if (data.code !== 200) {
-    throw new Error(`cloudsearch code=${data.code} ${data.message || ''}`);
+    const hint = data.code === 405 || data.code === 406
+      ? '操作频繁，请稍后重试'
+      : data.message || '';
+    throw new Error(`cloudsearch code=${data.code} ${hint}`.trim());
   }
   return data.result;
 }
@@ -316,6 +392,96 @@ function mapPlaylist(p: any): DiscoverPlaylist {
     creator: { nickname: p.creator?.nickname || '' },
     tags: [],
     description: p.description || '',
+  };
+}
+
+/** 上游响应里唯一的数组字段（djradio 各腿的键名不稳定，按形状取）。 */
+function firstArray(value: unknown): any[] {
+  if (!value || typeof value !== 'object') return [];
+  for (const item of Object.values(value as Record<string, unknown>)) {
+    if (Array.isArray(item)) return item;
+  }
+  return [];
+}
+
+function normalizeDjRadio(raw: any): DjRadio {
+  const dj = raw?.dj || {};
+  const picUrl = raw?.picUrl || raw?.intervenePicUrl || '';
+  return {
+    id: String(raw?.id ?? ''),
+    name: raw?.name || '',
+    picUrl: String(picUrl).replace(/^http:/, 'https:'),
+    desc: raw?.desc || '',
+    dj: {
+      userId: dj.userId != null ? String(dj.userId) : '',
+      nickname: dj.nickname || '',
+      avatarUrl: String(dj.avatarUrl || '').replace(/^http:/, 'https:'),
+      signature: dj.signature || undefined,
+    },
+    programCount: Number(raw?.programCount) || 0,
+    subCount: Number(raw?.subCount) || 0,
+    shareCount: Number(raw?.shareCount) || 0,
+    commentCount: Number(raw?.commentCount) || 0,
+    createTime: Number(raw?.createTime) || 0,
+    lastProgramCreateTime: Number(raw?.lastProgramCreateTime) || 0,
+    lastProgramId: raw?.lastProgramId != null ? String(raw.lastProgramId) : '',
+    category: raw?.category || '',
+    secondCategory: raw?.secondCategory || undefined,
+    sourceType: 'netease',
+  };
+}
+
+/** programDesc 是富文本数组；优先它的纯文本，回落 description。 */
+function programDescriptionOf(program: any): string {
+  if (Array.isArray(program?.programDesc)) {
+    return program.programDesc.map((part: any) => part?.content || '').join('').trim();
+  }
+  return String(program?.description || '').trim();
+}
+
+function mapDjRadioProgram(program: any, radio: DjRadio): DjRadioProgram {
+  const mainSong = program?.mainSong || {};
+  const artists = Array.isArray(mainSong.artists)
+    ? mainSong.artists.map((a: any) => a?.name || '').filter(Boolean)
+    : [];
+  const cover = String(program?.coverUrl || radio.picUrl || '').replace(/^http:/, 'https:');
+  const durationMs = Number(program?.duration || mainSong.duration) || 0;
+  return {
+    id: String(mainSong.id ?? program?.mainTrackId ?? ''),
+    name: program?.name || mainSong.name || '',
+    artist: artists.join(' / ') || radio.dj.nickname,
+    album: radio.name,
+    duration: Math.floor(durationMs / 1000),
+    sourceType: 'netease',
+    url: '',
+    cover,
+    lrc: '',
+    programId: String(program?.id ?? ''),
+    radioId: radio.id,
+    serialNum: Number(program?.serialNum) || 0,
+    createTime: Number(program?.createTime) || 0,
+    listenerCount: Number(program?.listenerCount) || 0,
+    description: programDescriptionOf(program),
+    coverUrl: cover,
+  };
+}
+
+function emptyDjRadio(id: string): DjRadio {
+  return {
+    id: String(id),
+    name: '',
+    picUrl: '',
+    desc: '',
+    dj: { userId: '', nickname: '', avatarUrl: '' },
+    programCount: 0,
+    subCount: 0,
+    shareCount: 0,
+    commentCount: 0,
+    createTime: 0,
+    lastProgramCreateTime: 0,
+    lastProgramId: '',
+    category: '',
+    sourceType: 'netease',
   };
 }
 
@@ -741,6 +907,96 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       // 空结果不缓存,避免瞬时故障 10 分钟内无法自愈
       if (songs.length > 0) contentCache.set(cacheKey, result, PAGE_TTL_MS);
       return result;
+    },
+
+    /** 网易电台详情（#742；匿名 GET/POST 同一腿，返回 null = 电台不存在）。 */
+    async getDjRadioDetail(radioId: string): Promise<DjRadio | null> {
+      const cacheKey = `djradio_detail_netease_${radioId}`;
+      const cached = contentCache.get<DjRadio>(cacheKey);
+      if (cached) return cached;
+      return joinInflight(djRadioDetailInflight, cacheKey, async () => {
+        const data = await plaintextPostJson<any>(DJRADIO_DETAIL_URL, { id: radioId });
+        if (data?.code === 404) return null;
+        if (data?.code !== 200 || !data?.data) {
+          throw djRadioError(`获取电台详情 (radioId=${radioId})`, data);
+        }
+        const radio = normalizeDjRadio(data.data);
+        contentCache.set(cacheKey, radio, DJRADIO_TTL_MS);
+        return radio;
+      });
+    },
+
+    /** 电台节目分页；total 用列表 count，不拿详情 programCount 当可见期数。 */
+    async getDjRadioPrograms(
+      radioId: string,
+      offset: number,
+      limit: number,
+      asc = false,
+    ): Promise<DjRadioProgramsPage> {
+      const start = Math.max(0, Math.floor(Number(offset) || 0));
+      const size = Math.max(1, Math.floor(Number(limit) || 30));
+      const cacheKey = `djradio_programs_netease_${radioId}_${start}_${size}_${asc}`;
+      const cached = contentCache.get<DjRadioProgramsPage>(cacheKey);
+      if (cached) return cached;
+      return joinInflight(djRadioProgramsInflight, cacheKey, async () => {
+        const data = await plaintextPostJson<any>(DJRADIO_PROGRAMS_URL, {
+          radioId,
+          limit: size,
+          offset: start,
+          asc: asc ? 'true' : 'false',
+        });
+        if (data?.code !== 200) {
+          throw djRadioError(`获取电台节目 (radioId=${radioId})`, data);
+        }
+        const rawPrograms = Array.isArray(data.programs) ? data.programs : [];
+        const radio = rawPrograms[0]?.radio
+          ? normalizeDjRadio(rawPrograms[0].radio)
+          : emptyDjRadio(radioId);
+        const result = {
+          programs: rawPrograms.map((program: any) => mapDjRadioProgram(program, radio)),
+          total: Number(data.count) || 0,
+          more: Boolean(data.more),
+        };
+        if (result.programs.length > 0) contentCache.set(cacheKey, result, DJRADIO_TTL_MS);
+        return result;
+      });
+    },
+
+    /** 按用户 id 取该用户发布的电台（歌手页 accountId → 电台列表）。 */
+    async getArtistRadios(userId: string): Promise<DjRadioListPage> {
+      const cacheKey = `artist_radios_netease_${userId}`;
+      const cached = contentCache.get<DjRadioListPage>(cacheKey);
+      if (cached) return cached;
+      return joinInflight(artistRadiosInflight, cacheKey, async () => {
+        const data = await plaintextPostJson<any>(DJRADIO_BY_USER_URL, { userId });
+        if (data?.code !== 200) {
+          throw djRadioError(`获取歌手电台 (userId=${userId})`, data);
+        }
+        const result = {
+          radios: firstArray(data).map(normalizeDjRadio),
+          total: Number(data.count) || 0,
+          more: Boolean(data.hasMore),
+          subCount: Number(data.subCount) || 0,
+        };
+        if (result.radios.length > 0) contentCache.set(cacheKey, result, SEARCH_TTL_MS);
+        return result;
+      });
+    },
+
+    /** 电台搜索（#742；cloudsearch type=1009 上游只回 top 10，不做 offset 分页）。 */
+    async searchDjRadios(keyword: string, limit = DJRADIO_SEARCH_LIMIT): Promise<DjRadio[]> {
+      const kw = keyword.trim();
+      if (!kw) throw new Error('电台搜索需要非空关键词');
+      const size = Math.min(Math.max(1, Math.floor(Number(limit) || DJRADIO_SEARCH_LIMIT)), DJRADIO_SEARCH_LIMIT);
+      const cacheKey = `search_djradios_${kw}_${size}`;
+      const cached = contentCache.get<DjRadio[]>(cacheKey);
+      if (cached && Array.isArray(cached)) return cached;
+      return joinInflight(djRadioSearchInflight, cacheKey, async () => {
+        const result = await cloudsearchSearch(kw, CLOUDSEARCH_TYPE_DJRADIO, size, 0);
+        const radios = firstArray(result).map(normalizeDjRadio);
+        if (radios.length > 0) contentCache.set(cacheKey, radios, SEARCH_TTL_MS);
+        return radios;
+      });
     },
 
     /** 歌手分类列表（原 getNeteaseArtists，initial 固定 -1 与双端调用点一致）。 */

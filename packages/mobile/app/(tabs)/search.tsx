@@ -8,9 +8,9 @@ import {
 } from 'react-native';
 import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
-import { CircleAlert, ListMusic, Music2, User } from 'lucide-react-native';
+import { CircleAlert, ListMusic, Music2, Radio, User } from 'lucide-react-native';
 import { formatPlayCount, getDirectClient } from '@mplayer/core';
-import type { DiscoverPlaylist, SongGroup } from '@mplayer/core';
+import type { DiscoverPlaylist, DjRadio, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
 import { usePlayerStore } from '../../stores/playerStore';
@@ -35,14 +35,16 @@ const SEARCH_TABS: { key: SearchTab; label: string }[] = [
   { key: 'songs', label: '歌曲' },
   { key: 'artists', label: '歌手' },
   { key: 'playlists', label: '歌单' },
+  { key: 'djradios', label: '电台' },
 ];
 
 
-type SearchTab = 'songs' | 'artists' | 'playlists';
+type SearchTab = 'songs' | 'artists' | 'playlists' | 'djradios';
 
 // 歌手/歌单搜索序号（模块级）：慢响应不得覆盖新关键词的结果
 let artistSearchSeq = 0;
 let playlistSearchSeq = 0;
+let djradioSearchSeq = 0;
 
 /** 歌单搜索每页张数（core 内部钳到 ≤100；30 与发现页歌单网格一致）。 */
 const PLAYLIST_PAGE_SIZE = 30;
@@ -86,6 +88,32 @@ export default function SearchPage() {
   const [playlistsError, setPlaylistsError] = useState(false);
   /** 已发起搜索的关键词：同关键词来回切 tab 不重复发（换关键词时清空）。 */
   const playlistKeywordRef = useRef<string | null>(null);
+  const [djradios, setDjradios] = useState<DjRadio[]>([]);
+  const [djradiosLoading, setDjradiosLoading] = useState(false);
+  const [djradiosError, setDjradiosError] = useState(false);
+  const djradioKeywordRef = useRef<string | null>(null);
+
+  /** 电台搜索：cloudsearch type=1009 上游只回 top 10，无分页；懒加载。 */
+  const searchDjradios = async (kw: string, force = false) => {
+    if (!kw) return;
+    if (!force && djradioKeywordRef.current === kw) return;
+    djradioKeywordRef.current = kw;
+    const seq = ++djradioSearchSeq;
+    setDjradiosLoading(true);
+    setDjradiosError(false);
+    try {
+      const radios = await getDirectClient('netease')!.searchDjRadios!(kw);
+      if (seq !== djradioSearchSeq) return;
+      setDjradios(radios);
+    } catch (e: any) {
+      if (seq !== djradioSearchSeq) return;
+      console.error('[Search] djradios error:', e.message);
+      setDjradios([]);
+      setDjradiosError(true);
+    } finally {
+      if (seq === djradioSearchSeq) setDjradiosLoading(false);
+    }
+  };
 
   /**
    * 歌单搜索（#415）。**懒加载**：只有切到「歌单」tab 才调 —— `cloudsearch/pc` 已是
@@ -177,6 +205,11 @@ export default function SearchPage() {
     playlistKeywordRef.current = null;
     setPlaylists([]);
     setPlaylistsError(false);
+    djradioSearchSeq += 1;
+    djradioKeywordRef.current = null;
+    setDjradios([]);
+    setDjradiosError(false);
+    setDjradiosLoading(false);
   }, [q]);
 
   // 切换源时重新搜索（歌手仅网易云，不随源变）
@@ -195,6 +228,7 @@ export default function SearchPage() {
           setActiveTab(next);
           // 懒加载：切到「歌单」tab 才打这一发（同关键词重复切不会重复发）
           if (next === 'playlists') void searchPlaylists(q);
+          if (next === 'djradios') void searchDjradios(q);
         }}
         scrollable={false}
       />
@@ -219,6 +253,55 @@ export default function SearchPage() {
           <View style={styles.emptyContainer}>
             <Music2 size={48} color={colors.textDisabled} />
             <Text style={styles.emptyText}>搜索歌曲和歌手</Text>
+          </View>
+        )
+      ) : activeTab === 'djradios' ? (
+        djradiosLoading && djradios.length === 0 ? (
+          <CoverGridSkeleton columns={2} />
+        ) : djradiosError ? (
+          <View style={styles.emptyContainer}>
+            <CircleAlert size={48} color={colors.danger} />
+            <Text style={[styles.emptyText, { color: colors.danger }]}>电台搜索失败</Text>
+            <ScalePress style={styles.retryButton} onPress={() => void searchDjradios(q, true)}>
+              <Text style={styles.retryText}>重试</Text>
+            </ScalePress>
+          </View>
+        ) : djradios.length > 0 ? (
+          <FlatList
+            key="djradio-results"
+            data={djradios}
+            keyExtractor={(item) => item.id}
+            {...listWindowProps}
+            numColumns={2}
+            columnWrapperStyle={styles.playlistRow}
+            contentContainerStyle={[
+              styles.playlistGrid,
+              { paddingBottom: bottomChromeHeight(insets.bottom, false, playerVisible) + SEARCH_TAIL_PADDING },
+            ]}
+            ListFooterComponent={<Text style={styles.playlistMeta}>网易云电台搜索最多展示 10 个结果</Text>}
+            renderItem={({ item: r }) => (
+              <ScalePress
+                style={styles.playlistCard}
+                onPress={() => router.push(`/djradio/${r.id}?name=${encodeURIComponent(r.name)}&pic=${encodeURIComponent(r.picUrl || '')}&dj=${encodeURIComponent(r.dj.nickname || '')}` as any)}
+              >
+                {r.picUrl ? (
+                  <LazyCover uri={r.picUrl} style={styles.playlistCover} />
+                ) : (
+                  <View style={[styles.playlistCover, styles.playlistCoverFallback]}>
+                    <Radio size={28} color={colors.textDisabled} />
+                  </View>
+                )}
+                <Text style={styles.playlistName} numberOfLines={2}>{r.name}</Text>
+                <Text style={styles.playlistMeta} numberOfLines={1}>
+                  {r.dj.nickname}{r.programCount ? ` · ${r.programCount} 期` : ''}
+                </Text>
+              </ScalePress>
+            )}
+          />
+        ) : (
+          <View style={styles.emptyContainer}>
+            <Radio size={48} color={colors.textDisabled} />
+            <Text style={styles.emptyText}>没有搜到电台</Text>
           </View>
         )
       ) : activeTab === 'playlists' ? (

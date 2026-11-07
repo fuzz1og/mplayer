@@ -82,6 +82,28 @@
 - 页面大小建议 20–30（移动）或 30–50（桌面）；单页 100 条响应约 586KB，没必要一次拉满。
 - `radioId=999999999` 时列表返回 `{"code":200,"count":0,"programs":[],"more":false}`；不存在的电台应先由详情接口判 404，不要把「列表空」直接当网络失败。
 
+### 1.4 歌手页电台（2026-11-07 补测）
+
+`GET /api/v1/artist/{id}` 会返回 `artist.accountId`（网易用户 id；只对入驻艺人有值，普通歌手可能缺省）。用这个 id 调：
+
+```http
+POST https://music.163.com/api/djradio/get/byuser
+content-type: application/x-www-form-urlencoded
+
+userId=79952226
+```
+
+匿名返回 `code=200`、`count`、`subCount`、`hasMore` 和电台数组；`limit` 实测被忽略，`offset` 可跳过前缀（样本 5 个电台）。真实链路：
+
+```text
+搜索歌手名「邪热搜索」
+  → cloudsearch/pc type=100 → artist 12084453
+  → /api/v1/artist/12084453 → accountId 79952226
+  → /api/djradio/get/byuser → 5 个电台（含 AI 陶喆 1003897323）
+```
+
+因此「歌手页电台」不需要新增用户主页：歌手页拿到 `accountId` 后追加一块电台列表即可。`accountId` 缺失或返回 0 个电台时整块隐藏。样本陶喆（artist 5196 / accountId 1104594）返回 1 个电台；周杰伦/林俊杰/陈奕迅在匿名 `/api/v1/artist/{id}` 中没有 `accountId`，应隐藏。
+
 ## 2. 接口实测矩阵（2026-11-07，匿名零 Cookie）
 
 | 能力 | 端点 | 实测 | 备注 |
@@ -164,6 +186,7 @@ Referer: https://music.163.com/
 | 桌面搜索 | `DiscoverPageV2.tsx:56` TABS（榜单/专辑/歌单/歌手），`:435` 歌单搜索 | 加「电台」tab，走 `searchDjRadios`，懒加载 |
 | 移动详情 | `app/album/[id].tsx:96` AlbumHero；`app/discover-playlist/[id].tsx:199` CollapsingHero；`AlbumHero.tsx:110` | 新建 `app/djradio/[id].tsx`，复用 CollapsingHero/SongRow 与 `setQueue/playSong` |
 | 移动搜索 | `app/(tabs)/search.tsx:34` SEARCH_TABS | 加「电台」tab，和现有歌单 tab 同一懒加载/seq 守卫模式 |
+| 歌手页电台 | `ArtistDetailPage` 现有 Segmented / `ArtistDetailPage` 移动版专辑区 | 新增「电台」tab / 横滑区；`Artist.accountId` 存在且结果非空才显示 |
 | 链接导入 | `packages/core/src/api/playlistImport.ts:21` 只解析 `/playlist` | 可另加 `djradio` 链接解析；不要混进「歌单导入」语义 |
 
 **建议的最小数据契约**（字段级）：
@@ -206,11 +229,12 @@ export interface DjRadioDetail {
 
 **入口优先级**：
 
-1. **搜索「电台」tab**（推荐首版）：桌面 `DiscoverPageV2` 的二级 tab + 移动搜索页 `SEARCH_TABS`；`POST /api/cloudsearch/pc type=1009` 匿名可用，结果数组直接进新页面。搜索响应 10 条约 17KB，成本可控。
-2. **链接打开/导入**：用户给的就是 `music.163.com/#/djradio?id=...`；可扩展 `parsePlaylistUrl` 的兄弟函数 `parseDjRadioUrl`，但不要把它归到「导入歌单」，否则语义会坏。
-3. **发现页热门/精选电台**：`/api/djradio/recommend/v1`、`/api/djradio/hot/v1` 已实测匿名可用；作为独立发现面后置，避免首版铺太大。
+1. **歌手搜索名链路**（用户主路径）：搜索歌手名 → 歌手页 → 歌手页「电台」tab / 横滑区 → 电台详情；`accountId` 是这条链路的桥。
+2. **搜索「电台」tab**（辅助入口）：桌面 `DiscoverPageV2` 的二级 tab + 移动搜索页 `SEARCH_TABS`；`POST /api/cloudsearch/pc type=1009` 匿名可用，结果数组直接进新页面。搜索响应 10 条约 17KB，成本可控。
+3. **链接打开/导入**：用户给的就是 `music.163.com/#/djradio?id=...`；可扩展 `parsePlaylistUrl` 的兄弟函数 `parseDjRadioUrl`，但不要把它归到「导入歌单」，否则语义会坏。
+4. **发现页热门/精选电台**：`/api/djradio/recommend/v1`、`/api/djradio/hot/v1` 已实测匿名可用；作为独立发现面后置，避免首版铺太大。
 
-**范围边界（建议）**：首版最小范围 = 电台详情页 + 搜索电台入口（只展示 top 10）+ 直接路由 `/djradio/:id`；不做完整搜索分页。可选更大范围 = 发现页「电台」tab（recommend/hot/category/toplist 等）；属于独立票，不阻塞详情页。
+**范围边界（已定）**：首版 = 电台详情页 + 搜索电台入口（top 10）+ 歌手页电台（仅 `accountId` 入驻艺人）+ 直接路由 `/djradio/:id` + 保存全部到新歌单；不做收藏、不做网易订阅、不做用户主页、不做发现页完整电台频道。
 
 **双端影响**：
 - core：新增类型/方法/缓存；播放器、原生播放、tier3 都不改。
@@ -229,17 +253,20 @@ export interface DjRadioDetail {
 7. **非官方接口**：随时可能变；单测全部走 transport 注入、零真实网络（参照 `neteaseContent.test.ts` / `neteasePlaylistSearch.test.ts`）。
 8. **链接解析**：`parsePlaylistUrl` 只认 `/playlist`，新增 `djradio` 要独立解析；`music.163.com/#/djradio?id=` 的 hash 路由必须自己解析 `id`。
 9. **mainSong 潜在重复**：样本 126 期 mainSong id 唯一；一般电台未保证，列表 key / 队列去重要用 `programId` 或 index 兜底，不能假设一号一期。
+10. **收藏/订阅（已确认不做）**：`POST /api/djradio/sub` 匿名返回 `code=301`（需要登录）；现有「我喜欢的音乐」只存歌曲；本地电台收藏需要独立存储域和「我的电台」页，另开票。
+11. **歌手页 accountId（已实测）**：只有入驻艺人返回 `accountId`；不要把 artist id 当 userId 调 `get/byuser`（5196 返回 0 个电台）。无 `accountId` 时隐藏电台区块，不做按名字兜底搜索。
 
 ## 7. 建议的后续票拆分
 
 | 票 | 范围 | 验收标准 | 依赖 |
 |---|---|---|---|
-| 母票 | 网易云 DJ 电台内容面 | 能搜索/链接进入电台，看到 Hero + 节目分页；播放全部走现有队列；双端一致 | — |
-| core 契约 | `DjRadio`/`DjRadioProgram`/`DjRadioDetail`、详情/节目分页/节目详情/搜索、缓存/单飞/错误语义 | 零网络单测覆盖字段映射、`program.id` vs `mainSong.id`、`programCount` vs `count`、404/406、分页 | 母票 |
-| 桌面页 | `/djradio/:id`、Hero、节目行、分页、播放全部、搜索 tab | 真实 Electron 点进样本电台，播放第 1/126 期；浮层/样式验收 | core |
-| 移动页 | `app/djradio/[id].tsx`、CollapsingHero、搜索 tab | 真机进入样本电台，播放并切后台/锁屏；队列正确 | core |
-| 入口 | 搜索「电台」tab + `djradio` 链接解析 | 搜索「AI 陶喆」能看到样本；粘贴链接能打开；不改歌单导入语义 | core |
-| ADR | 跨端契约：源归属、`Song` 映射、计数/排序/失败语义、入口范围 | ADR 接受并进 `docs/adr/README.md`；AGENTS 指针更新 | 母票 |
+| 母票 #742 | 网易云 DJ 电台内容面 | 能搜索歌手名/电台、从歌手页进入电台，看到 Hero + 节目分页；播放全部走现有队列；双端一致 | — |
+| core 契约 | `DjRadio`/`DjRadioProgram`、详情/节目分页/按用户取电台/搜索、`Artist.accountId`、缓存/单飞/错误语义 | 零网络单测覆盖字段映射、`program.id` vs `mainSong.id`、`programCount` vs `count`、404/406、分页 | 母票 |
+| 桌面页 | `/djradio/:id`、Hero、节目行、分页、播放全部、下载全部、保存全部到新歌单 | 真实 Electron 点进样本电台，播放第 1/126 期；保存全部可用 | core |
+| 桌面入口 | 搜索「电台」tab + 歌手页「电台」tab | 搜索「邪热搜索」→ 歌手页 → AI 陶喆；搜索「AI 陶喆」电台能进详情 | core |
+| 移动页 | `app/djradio/[id].tsx`、CollapsingHero、播放全部/下载 | 真机进入样本电台，播放并切后台/锁屏；队列正确 | core |
+| 移动入口 | 搜索「电台」tab + 歌手页电台横滑区 | 真机走歌手名链路进入样本电台 | core |
+| ADR | 跨端契约：`Song` 映射、`accountId`、计数/排序/失败语义、无收藏订阅 | ADR 接受并进 `docs/adr/README.md`；GLOSSARY 更新 | 母票 |
 
 ## 8. 参考来源
 

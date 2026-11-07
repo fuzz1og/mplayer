@@ -17,6 +17,7 @@ const QueuePage = lazy(() => import('@/renderer/pages/QueuePage'));
 const ArtistListPage = lazy(() => import('@/renderer/pages/ArtistListPage'));
 const ArtistDetailPage = lazy(() => import('@/renderer/pages/ArtistDetailPage'));
 const AlbumDetailPage = lazy(() => import('@/renderer/pages/AlbumDetailPage'));
+const DjRadioDetailPage = lazy(() => import('@/renderer/pages/DjRadioDetailPage'));
 const DiscoverPlaylistListPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistListPage'));
 const DiscoverPlaylistDetailPage = lazy(() => import('@/renderer/pages/DiscoverPlaylistDetailPage'));
 const UiLabPage = lazy(() => import('@/renderer/pages/UiLabPage'));
@@ -155,6 +156,14 @@ export const routes: RouteObject[] = [
         element: (
           <Suspense fallback={<Loading />}>
             <AlbumDetailPage />
+          </Suspense>
+        ),
+      },
+      {
+        path: 'djradio/:id',
+        element: (
+          <Suspense fallback={<Loading />}>
+            <DjRadioDetailPage />
           </Suspense>
         ),
       },

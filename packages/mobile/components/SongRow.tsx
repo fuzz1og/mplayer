@@ -27,6 +27,8 @@ interface SongRowProps {
   rank?: number;
   onPress?: (song: Song) => void;
   showSource?: boolean;
+  /** 电台节目等非歌曲内容：隐藏行内收藏/更多动作，避免换源/收藏污染语义。 */
+  hideActions?: boolean;
   queueSongs?: Song[];
   /** 换源成功回调：父组件用它更新自己的列表 state（歌单页同时持久化） */
   onSwap?: (original: Song, swapped: Song) => void;
@@ -57,6 +59,7 @@ function SongRow({
   rank,
   onPress,
   showSource = false,
+  hideActions = false,
   queueSongs,
   onSwap,
   onRemove,
@@ -187,7 +190,7 @@ function SongRow({
       )}
 
       {/* 选择模式下行内动作收起：此时点行是「切换选中」，留着爱心/更多只会互相打架 */}
-      {!selectionMode && (
+      {!selectionMode && !hideActions && (
         <>
           <ScalePress
             onPress={handleFavorite}

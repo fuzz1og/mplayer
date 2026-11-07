@@ -1,4 +1,14 @@
-import type { Album, AlbumDetail, Artist, DiscoverPlaylist, Song, SourceKey } from '../types/index.js';
+import type {
+  Album,
+  AlbumDetail,
+  Artist,
+  DiscoverPlaylist,
+  DjRadio,
+  DjRadioListPage,
+  DjRadioProgramsPage,
+  Song,
+  SourceKey,
+} from '../types/index.js';
 import { isNonFullDirect } from './playability.js';
 import type { UrlInfo } from './playability.js';
 import { getPrefetchedUrl, setPrefetchedUrl } from '../api/prefetchCache.js';
@@ -199,6 +209,73 @@ export async function getAlbumDetailRouted(source: SourceKey, albumId: string): 
   }
 }
 
+export type DjRadioDetailOutcome =
+  | { ok: true; radio: DjRadio }
+  | { ok: false; reason: 'unsupported' | 'not-found' | 'failed'; message: string };
+
+export async function getDjRadioDetailRouted(
+  source: SourceKey,
+  radioId: string,
+): Promise<DjRadioDetailOutcome> {
+  const client = getDirectClient(source);
+  if (!client?.getDjRadioDetail) {
+    return { ok: false, reason: 'unsupported', message: `源 ${source} 未实现内容能力 getDjRadioDetail` };
+  }
+  try {
+    const radio = await client.getDjRadioDetail(radioId);
+    if (!radio) {
+      return { ok: false, reason: 'not-found', message: `电台不存在 (${source}:${radioId})` };
+    }
+    return { ok: true, radio };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: 'failed', message: `电台详情获取异常 (${source}:${radioId}): ${message}` };
+  }
+}
+
+export type DjRadioProgramsOutcome =
+  | { ok: true; page: DjRadioProgramsPage }
+  | { ok: false; reason: 'unsupported' | 'failed'; message: string };
+
+export async function getDjRadioProgramsRouted(
+  source: SourceKey,
+  radioId: string,
+  offset: number,
+  limit: number,
+  asc = false,
+): Promise<DjRadioProgramsOutcome> {
+  const client = getDirectClient(source);
+  if (!client?.getDjRadioPrograms) {
+    return { ok: false, reason: 'unsupported', message: `源 ${source} 未实现内容能力 getDjRadioPrograms` };
+  }
+  try {
+    return { ok: true, page: await client.getDjRadioPrograms(radioId, offset, limit, asc) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: 'failed', message: `电台节目获取异常 (${source}:${radioId}): ${message}` };
+  }
+}
+
+export type DjRadioListOutcome =
+  | { ok: true; page: DjRadioListPage }
+  | { ok: false; reason: 'unsupported' | 'failed'; message: string };
+
+export async function getArtistRadiosRouted(
+  source: SourceKey,
+  userId: string,
+): Promise<DjRadioListOutcome> {
+  const client = getDirectClient(source);
+  if (!client?.getArtistRadios) {
+    return { ok: false, reason: 'unsupported', message: `源 ${source} 未实现内容能力 getArtistRadios` };
+  }
+  try {
+    return { ok: true, page: await client.getArtistRadios(userId) };
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    return { ok: false, reason: 'failed', message: `歌手电台获取异常 (${source}:${userId}): ${message}` };
+  }
+}
+
 /**
  * 内容缓存抽象（D6 #239）：直连客户端经构造注入访问宿主缓存，
  * core 默认实现包一层 cacheManager（同语义：get 命中返回数据 / 未命中 null，
@@ -257,6 +334,19 @@ export interface DirectSourceClient {
   getNewAlbums?: (area: string, offset: number, limit: number) => Promise<Album[]>;
   /** 专辑详情 + 专辑歌曲（失败返回 null；页面用 `getAlbumDetailRouted` 取可区分语义）。 */
   getAlbumDetail?: (albumId: string) => Promise<AlbumDetail | null>;
+  /** 网易云 DJ 电台详情（#742）；返回 null = 源支持但这次没取到/电台不存在。 */
+  getDjRadioDetail?: (radioId: string) => Promise<DjRadio | null>;
+  /** 网易云电台节目分页（#742）；total 用列表 count，不是详情 programCount。 */
+  getDjRadioPrograms?: (
+    radioId: string,
+    offset: number,
+    limit: number,
+    asc?: boolean,
+  ) => Promise<DjRadioProgramsPage>;
+  /** 按用户 id 取该用户发布的电台（#742，歌手页用 accountId）。 */
+  getArtistRadios?: (userId: string) => Promise<DjRadioListPage>;
+  /** 电台搜索（#742；网易只返回 top 10，无分页）。 */
+  searchDjRadios?: (keyword: string, limit?: number) => Promise<DjRadio[]>;
   /** 歌手分类列表（cat 透传，offset/limit 分页）。 */
   getArtists?: (cat: number, offset: number, limit: number) => Promise<{ artists: Artist[]; total: number; more: boolean }>;
   /** 歌手详情合并（hotSongs + albums，一次调用渲染歌手页首屏）。 */
@@ -299,6 +389,10 @@ export const CONTENT_METHODS = [
   'getRecommendedPlaylists',
   'getNewAlbums',
   'getAlbumDetail',
+  'getDjRadioDetail',
+  'getDjRadioPrograms',
+  'getArtistRadios',
+  'searchDjRadios',
   'getArtists',
   'getArtistDetail',
   'getArtistInfo',

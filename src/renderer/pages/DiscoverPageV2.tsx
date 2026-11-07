@@ -16,12 +16,13 @@ import SongList from '@/renderer/components/SongList';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import AlbumScroll from '@/renderer/components/AlbumScroll';
 import PlaylistPageGrid from '@/renderer/components/PlaylistPageGrid';
+import DjRadioGrid from '@/renderer/components/DjRadioGrid';
 import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import ArtistCard from '@/renderer/components/ArtistCard';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
 import { pickToplistGroup, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
-import type { Album, Song, DiscoverPlaylist, Artist, ChartKind, ToplistGroup, ToplistSourceKey } from '@mplayer/core';
+import type { Album, Song, DiscoverPlaylist, Artist, ChartKind, ToplistGroup, ToplistSourceKey, DjRadio } from '@mplayer/core';
 
 /** 榜单源切换的可选项（#332 选项 A：单元榜 + 源切换）；键域取自 core，不本地维护字面量。 */
 const CHART_SOURCE_OPTIONS = Object.keys(TOPLIST_SOURCE_IDS) as ToplistSourceKey[];
@@ -399,8 +400,8 @@ const DiscoverPageV2: React.FC = () => {
     hasMore,
   });
 
-  // 搜索结果二级 tab：单曲 / 歌手 / 歌单。「查看歌手」入口通过 preferredTab 落在歌手 tab
-  const [activeSearchTab, setActiveSearchTab] = useState<'songs' | 'artists' | 'playlists'>(() => useSearchStore.getState().preferredTab);
+  // 搜索结果二级 tab：单曲 / 歌手 / 歌单 / 电台。「查看歌手」入口通过 preferredTab 落在歌手 tab
+  const [activeSearchTab, setActiveSearchTab] = useState<'songs' | 'artists' | 'playlists' | 'djradios'>(() => useSearchStore.getState().preferredTab);
   const [artistResults, setArtistResults] = useState<Artist[]>([]);
   const [artistLoading, setArtistLoading] = useState(false);
   const [artistError, setArtistError] = useState(false);
@@ -418,6 +419,35 @@ const DiscoverPageV2: React.FC = () => {
   const playlistSearchSeqRef = useRef(0);
   /** 已发起/已完成搜索的关键词（同一关键词切来切去不重复发；换关键词时清空）。 */
   const playlistSearchKeywordRef = useRef<string | null>(null);
+
+  // 电台 tab：upstream 只回 top 10，无分页；懒加载 + 同关键词只发一次
+  const [radioResults, setRadioResults] = useState<DjRadio[]>([]);
+  const [radioLoading, setRadioLoading] = useState(false);
+  const [radioError, setRadioError] = useState<string | null>(null);
+  const radioSearchSeqRef = useRef(0);
+  const radioSearchKeywordRef = useRef<string | null>(null);
+
+  const ensureRadiosSearch = useCallback((keyword: string, force = false) => {
+    if (!keyword) return;
+    if (!force && radioSearchKeywordRef.current === keyword) return;
+    radioSearchKeywordRef.current = keyword;
+    const seq = ++radioSearchSeqRef.current;
+    setRadioLoading(true);
+    setRadioError(null);
+    callMusicApi('searchDjRadios', 'netease', keyword)
+      .then((radios) => {
+        if (seq !== radioSearchSeqRef.current) return;
+        setRadioResults(radios);
+      })
+      .catch((err: unknown) => {
+        if (seq !== radioSearchSeqRef.current) return;
+        setRadioResults([]);
+        setRadioError(err instanceof Error ? err.message : '电台搜索失败');
+      })
+      .finally(() => {
+        if (seq === radioSearchSeqRef.current) setRadioLoading(false);
+      });
+  }, []);
 
   /**
    * 歌单 tab 的懒加载入口（#415）。
@@ -485,9 +515,10 @@ const DiscoverPageV2: React.FC = () => {
     hasMore: activeSearchTab === 'playlists' && playlistMore,
   });
 
-  const handleSearchTabChange = (tab: 'songs' | 'artists' | 'playlists') => {
+  const handleSearchTabChange = (tab: 'songs' | 'artists' | 'playlists' | 'djradios') => {
     setActiveSearchTab(tab);
     if (tab === 'playlists') ensurePlaylistsSearch(currentKeyword);
+    if (tab === 'djradios') ensureRadiosSearch(currentKeyword);
   };
   // 「查看歌手」偏好：订阅变化以覆盖「同关键词再次进入」的边界（关键词未变时 effect 不触发）
   const preferredTab = useSearchStore(s => s.preferredTab);
@@ -504,6 +535,11 @@ const DiscoverPageV2: React.FC = () => {
     playlistSearchKeywordRef.current = null;
     setPlaylistResults([]);
     setPlaylistError(null);
+    radioSearchSeqRef.current += 1;
+    radioSearchKeywordRef.current = null;
+    setRadioResults([]);
+    setRadioError(null);
+    setRadioLoading(false);
     if (!currentKeyword) return;
     const seq = ++artistSearchSeqRef.current;
     setArtistLoading(true);
@@ -545,12 +581,13 @@ const DiscoverPageV2: React.FC = () => {
           )}
         />
 
-        {/* 单曲 / 歌手 / 歌单二级 tab */}
+        {/* 单曲 / 歌手 / 歌单 / 电台二级 tab */}
         <div className="discover-subtabs">
           {([
             { key: 'songs' as const, label: '单曲', count: searchSongs.length },
             { key: 'artists' as const, label: '歌手', count: artistResults.length },
             { key: 'playlists' as const, label: '歌单', count: playlistResults.length },
+            { key: 'djradios' as const, label: '电台', count: radioResults.length },
           ]).map((tab) => (
             <button
               key={tab.key}
@@ -613,6 +650,20 @@ const DiscoverPageV2: React.FC = () => {
                 )}
               </div>
             )
+          ) : activeSearchTab === 'djradios' ? (
+            <div className="discover-scroll discover-scroll--padded">
+              <DjRadioGrid
+                radios={radioResults}
+                loading={radioLoading}
+                error={radioError}
+                onRetry={() => ensureRadiosSearch(currentKeyword, true)}
+                onSelect={(radio) => navigate(`/djradio/${radio.id}`)}
+                emptyText="没有搜到电台"
+              />
+              {!radioLoading && !radioError && radioResults.length > 0 && (
+                <div className="discover-note discover-note--tight">网易云电台搜索最多展示 10 个结果</div>
+              )}
+            </div>
           ) : activeSearchTab === 'playlists' ? (
             // 歌单 tab（#415）：复用发现页同一张歌单网格与既有详情页；空态文案区分
             // 「搜索歌单」与发现页一级的「歌单广场」（两者语义不同，见 PlaylistPageGrid.emptyText）

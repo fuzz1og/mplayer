@@ -73,6 +73,8 @@ interface SongRowProps {
    * 传元素会让每帧新建的 ReactNode 击穿行的 memo，与 renderActions 同理。
    */
   renderActionsLead?: (song: Song, index: number) => React.ReactNode;
+  /** 自定义序号文案（电台节目期号等）；缺省显示 index + 1。 */
+  indexLabel?: React.ReactNode;
   /** 行尾只保留单个 28px「更多」按钮，下载 / 收藏收进菜单 */
   compactActions?: boolean;
   style?: React.CSSProperties;
@@ -94,7 +96,7 @@ const SongRow: React.FC<SongRowProps> = ({
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
   fillTitle = false, dragHandle, actions, rowRef, compact = false,
   variant = 'standard', showDuration = false, compactActions = false, style,
-  indexWidth, renderActionsLead,
+  indexWidth, renderActionsLead, indexLabel,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -179,7 +181,7 @@ const SongRow: React.FC<SongRowProps> = ({
             </div>
           ) : (
             <span className="song-row__number" data-current={isCurrentSong || undefined}>
-              {index + 1}
+              {indexLabel ?? index + 1}
             </span>
           ))}
         </div>
