@@ -263,10 +263,15 @@ const DEPENDENCY_FILES = /(^|\/)(package\.json|package-lock\.json|app\.json)$/;
 
 function classifyExpoFailure() {
   const git = (args) => spawnSync('git', args, { cwd: ROOT, encoding: 'utf8' });
-  const committed = git(['diff', '--name-only', 'origin/master...HEAD']);
+  let committed = git(['diff', '--name-only', 'origin/master...HEAD']);
+  if (committed.status !== 0) {
+    // CI 浅克隆没有 origin/master 的提交对象（no merge base）：退回本分支提交的文件清单，
+    // 仍只用于「本次改动有没有碰依赖文件」的判定。
+    committed = git(['log', '--pretty=format:', '--name-only', '-n', '50', 'HEAD']);
+  }
   if (committed.status !== 0) {
     const why = (committed.stderr ?? '').trim().split('\n')[0] || 'git diff 失败';
-    return { drift: false, why: '取不到 origin/master...HEAD 的 diff：' + why + '（先 git fetch origin master）' };
+    return { drift: false, why: '取不到本分支的文件清单：' + why + '（先 git fetch origin master）' };
   }
   // 未提交的改动（含暂存）也算：本地还没 commit 时只看已提交的一半，会误判成「master 自身运行」
   const pending = git(['diff', '--name-only', 'HEAD']);
