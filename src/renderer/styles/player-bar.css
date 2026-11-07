@@ -356,6 +356,16 @@
   justify-content: flex-end;
 }
 
+/* 图标与浮层间距也是 hover 命中区，避免指针移向滑杆时 :hover 断档 */
+.player-volume::before {
+  content: '';
+  position: absolute;
+  top: 0;
+  right: 100%;
+  bottom: 0;
+  width: var(--space-2);
+}
+
 .player-volume__mute {
   display: flex;
   align-items: center;
