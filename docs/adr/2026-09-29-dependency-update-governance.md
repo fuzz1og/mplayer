@@ -201,7 +201,7 @@ audit-weekly 对 #726 的三组读数（真安装主检出 / 干净基线 lock-o
 
 PR #727 / #728 仍 OPEN（audit-weekly 提供），合并后 lock 会变；**#667 需按新 lock 重跑读数**。#667 保持 OPEN（验收标准：只在残余清零时关闭）。
 
-## 2026-11-07 复核（#737：39 → 3 high）
+## 2026-11-07 复核（#737：27 → 3 high）
 
 **复核时刻 2026-11-07（Asia/Hong_Kong）· 基线 `587d352`（master，含 #734）· node `v22.23.2` / npm `10.9.8`。**
 
@@ -216,7 +216,7 @@ PR #727 / #728 仍 OPEN（audit-weekly 提供），合并后 lock 会变；**#66
 
 **Lock 重建口径**：在 Linux 侧（WSL）从 `git archive` 的干净 master 重建，保留 `@rollup/*` / `@esbuild/*` 的全部平台可选包；Windows 侧 `npm ci --ignore-scripts` 与 `npm run verify -- all` 复核通过。**不要在 Windows 上直接重建整份 lock**——#735 已实测会丢 Linux 原生包，CI 分片报 `MODULE_NOT_FOUND`。
 
-**读数**：`npm audit --package-lock-only` **39 → 3 high（0 critical / 0 moderate / 0 low）**；剩余 3 条全部是 `decode-uri-component` / `query-string` / `expo-router` 同一条链。`deepmerge` 随 Expo 57.0.32 的 `@expo/config` 更新移出依赖树；`glob@7.2.3` 与 `minimatch@3|5` 仍在树里，但不落在对应 advisory 的影响区间。
+**读数**：本轮基线（master `587d352`）`npm audit --package-lock-only` = **27 条（5 high / 21 moderate / 1 low）**；合并后 **3 high（0 critical / 0 moderate / 0 low）**。上一节的 39 是 2026-11-04 快照，两期之间 lock/registry 时点不同，不把两个数直接相减。剩余 3 条全部是 `decode-uri-component` / `query-string` / `expo-router` 同一条链。`deepmerge` 随 Expo 57.0.32 的 `@expo/config` 更新移出依赖树；`glob@7.2.3` 与 `minimatch@3|5` 仍在树里，但不落在对应 advisory 的影响区间。
 
 **残余不修的理由**：`expo-router@57` 仍依赖 CJS `query-string@7`，其 `decode-uri-component@^0.2.2` 被 `0.5.1` 的 ESM-only 入口挡住；直接顶版会在 Node/ Metro 的 `require()` 路径拿到命名空间对象而不是函数（本文「override 失效的三种成因」第 3 类）。干净且 CJS 可用的组合要等 `expo-router` 58 / SDK 58，不在本 PR 做跨 SDK 升级。
 
