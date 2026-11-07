@@ -25,7 +25,7 @@ cd .worktrees/<slug>
 
 完成标准：worktree 已建好，新分支基于最新 `origin/master`。
 
-- 不要创建 `.claude/worktrees/`、`.agents/worktrees/`、`.dsh-worktrees/` 或仓库内 `.codex/worktrees/`：项目 `.codex/hooks.json` 的 PreToolUse 守卫会拒绝这类 `git worktree add`。要全局生效，把 `.codex/hooks.json` 的 `command` 指向一个全局脚本路径，再合并到 `~/.codex/hooks.json`。
+- 不要创建 `.claude/worktrees/`、`.dsh-worktrees/` 或仓库内 `.codex/worktrees/`；`.worktrees/` 与 `.agents/worktrees/` 都已 gitignore，可以用于手工 worktree。Codex 目前没有 worktree setup hook；创建后按需 `npm install`（worktree 缺 node_modules，细节见下文），不要靠 hook 自动做依赖 link。
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/` `perf/`（与 commit type 同表；`perf/` 是本仓既有的性能类分支前缀），slug 用短英文（如 `fix/mobile-parity-tier3`）。
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - **分支名要在第一次 `git push -u` 之前就定对**——推上去之后**改不了 PR 的 head**：`gh pr edit` 没有 `--head` 参数，API `PATCH /repos/{o}/{r}/pulls/{n}` 传 `head=<分支>` 也会**静默忽略**（返回 200 但 `head.ref` 不变）。实测唯一可行路子是**关掉旧 PR、用新分支名重开**，代价是丢掉原 PR 编号与它的评论线程。所以命名别指望事后补救；开 PR 前先对照上一行核一遍。

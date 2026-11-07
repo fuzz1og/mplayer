@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * gate-registry.mjs — 门禁必须被某个入口调用（#717）：脚本躺在仓库里没人跑就是假门禁。
- * #654 注释门禁、#557 core typecheck 都犯过；判据是「门禁形态的脚本 / npm 命令出现在 verify.mjs、pre-commit、Codex hooks 或某个 workflow 里」。
+ * #654 注释门禁、#557 core typecheck 都犯过；判据是「门禁形态的脚本 / npm 命令出现在 verify.mjs、pre-commit 或某个 workflow 里」。
  */
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs';
@@ -15,12 +15,12 @@ const GATE_SHAPE = /(gate|lint|guard|check)\.(mjs|js)$/;
 /** 只在人工流程里出现的门禁形态脚本：必须写明为什么它不该进 verify。当前为空（恒定的常态）。 */
 const MANUAL = new Map();
 
-const ENTRY_FILES = ['scripts/verify.mjs', '.githooks/pre-commit', '.codex/hooks.json'];
+const ENTRY_FILES = ['scripts/verify.mjs', '.githooks/pre-commit'];
 const WORKFLOW_DIR = '.github/workflows';
 
 const read = (rel) => (existsSync(path.join(ROOT, rel)) ? readFileSync(path.join(ROOT, rel), 'utf8') : null);
 
-/** 入口正文：verify + pre-commit + Codex hooks + 全部 workflow。命中的意思是「这个入口会调用它」。 */
+/** 入口正文：verify + pre-commit + 全部 workflow。命中的意思是「这个入口会调用它」。 */
 function entryTexts() {
   const texts = [];
   for (const rel of ENTRY_FILES) {
@@ -50,7 +50,7 @@ for (const file of scriptFiles) {
     if (refs.length === 0) violations.push('scripts/' + file + ' 登记为人工脚本（' + manual + '），但没有任何入口提到它'); // dead allowlist
     continue;
   }
-  if (refs.length === 0) violations.push('scripts/' + file + ' 未被任何入口调用（verify.mjs / pre-commit / Codex hooks / workflow）');
+  if (refs.length === 0) violations.push('scripts/' + file + ' 未被任何入口调用（verify.mjs / pre-commit / workflow）');
 }
 for (const [file] of MANUAL) {
   if (!existsSync(path.join(ROOT, 'scripts', file))) violations.push('scripts/' + file + ' 已删除，从 MANUAL 允许清单移除');
@@ -73,7 +73,7 @@ if (violations.length > 0) {
   for (const v of violations) console.error('  ' + v);
   console.error([
     '',
-    '  处置：接进 scripts/verify.mjs 的某个分片（唯一入口），或进 .githooks/pre-commit / .codex/hooks.json / workflow；',
+    '  处置：接进 scripts/verify.mjs 的某个分片（唯一入口），或进 .githooks/pre-commit / workflow；',
     '        确实只应人工跑的，登记到本脚本的 MANUAL 并写明理由。',
   ].join('\n'));
   process.exit(1);

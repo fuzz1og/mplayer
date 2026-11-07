@@ -29,9 +29,6 @@ docs/assets/
 .claude/session-extract/
 .worktrees/
 .agents/worktrees/
-# Codex 项目配置：只跟踪团队 hooks，个人 config 不入库
-.codex/*
-!.codex/hooks.json
 # agent 会话工作区（验证日志、临时脚本、会话状态）——非仓库内容
 .local/
 # harness 子代理克隆容器：漏了它，`npm run lint` 会扫到克隆里的 core 构建产物并整片红

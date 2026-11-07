@@ -56,8 +56,9 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 **只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
 - **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。
+- **worktree**：优先 Codex 原生 worktree 模式（app 创建并切 cwd）；创建后按需 `npm install`（worktree 缺 node_modules；细节见 `docs/agents/git-workflow.md`）。Codex 目前没有 worktree setup hook，不要靠 hook 自动做依赖 link；`.worktrees/` 与 `.agents/worktrees/` 都已 gitignore，`.claude/worktrees/` 不要用。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。机械门禁见 `scripts/docs-gate.mjs` 的敏感扫描（**含** `docs/{adr,research,specs,wayfinder}` 存档与文档目录下的未跟踪文件），命中即 CI 红。
-- **发布前脱敏**：PR / issue / release 正文不得含本机用户目录、已知本机 dev 根、WSL/macOS 用户目录、设备型号、会话 worktree 名。机械门禁：`npm run verify -- static` 跑 `check-privacy --tracked`，pre-commit 跑同一脚本的 `--staged`；外部正文用 `node scripts/check-privacy.mjs --text <file>` 自检。设备型号无法机械判定，发布前人工核。
+- **发布前脱敏**：PR / issue / release 正文不得含本机用户目录、WSL/macOS 用户目录、设备型号、会话 worktree 名。机械门禁：`npm run verify -- static` 跑 `check-privacy --tracked`，pre-commit 跑同一脚本的 `--staged`；外部正文用 `node scripts/check-privacy.mjs --text <file>` 自检。设备型号无法机械判定，发布前人工核。
 - **验收截图不入库，活文档配图入库**：真机验收 / UI 走查的**证据图**传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'`）——PR 是它的一次性载体，入库只会攒下一堆没人再看第二眼的二进制。反过来，**活文档正文长期引用的产品图**（README 截图、logo）**必须入库**，放 `docs/assets/`。判据是「有没有一个长期存在的正文在引用它」，不是「它是不是截图」。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
 

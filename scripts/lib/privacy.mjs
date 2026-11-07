@@ -13,10 +13,6 @@ export const PRIVACY_RULES = [
     ),
   },
   {
-    name: 'windows-local-root',
-    re: /(?<![\w/])\b[A-Za-z]:[\\/]+(?:Playground|leidian|tools|ComfyUI[^\\/\s]*)(?=[\\/\s]|$)/gi,
-  },
-  {
     name: 'wsl-user-path',
     re: new RegExp(
       '(?<![\\w./-])\\/mnt\\/[a-z]\\/Users\\/(?!' + PLACEHOLDER + ')[A-Za-z0-9._-]+',
@@ -56,7 +52,6 @@ export function scanPrivacy(text, label) {
 
 export function maskPrivacyMatch(rule, match) {
   if (rule === 'session-id') return match.replace(/[0-9a-f]/gi, '*')
-  if (rule === 'windows-local-root') return match.slice(0, 3) + '***'
   const lastSeparator = Math.max(match.lastIndexOf('/'), match.lastIndexOf('\\'))
   return lastSeparator >= 0 ? match.slice(0, lastSeparator + 1) + '***' : '***'
 }

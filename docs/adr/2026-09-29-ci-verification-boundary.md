@@ -138,4 +138,4 @@
 
 `verify -- static` 现在跑 `node scripts/check-privacy.mjs --tracked`，pre-commit 用同一脚本的 `--staged`。
 规则与打码在 `scripts/lib/privacy.mjs`，worktree 根策略在 `scripts/lib/worktree-policy.mjs`
-（项目 `.codex/hooks.json` 的 PreToolUse 也读它）。边界仍是第 113 行：pre-commit 是本地加速，CI 的 `check` 是闸门。
+（`check-privacy` 读它）。边界仍是第 113 行：pre-commit 是本地加速，CI 的 `check` 是闸门。
