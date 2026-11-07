@@ -111,13 +111,14 @@ export function countText(xml, pattern) {
 
 // ==================== CLI ====================
 
+// 环境变量优先；未设时交给 PATH 解析（$ANDROID_HOME/platform-tools 需自行加入 PATH）
 const ADB = process.env.MOBILE_UI_ADB ?? 'adb';
 const SERIAL = process.env.MOBILE_UI_SERIAL ?? '';
 // 默认落 e2e/artifacts/（.gitignore:50 已覆盖），与 mobile-e2e 的快照目录一致
 const DUMP_FILE = process.env.MOBILE_UI_DUMP_FILE ?? path.join(REPO, 'e2e', 'artifacts', 'mobile-uidump.xml');
 
-// 每条 adb 都必须带超时。本机最常撞的失效是「adb 命令卡死」：雷电自带的 adb 与 scoop /
-// 平台工具的那份抢 5037，server 版本一不一致，start-server 就能无限等下去——脚本挂死比报错难查得多。
+// 每条 adb 都必须带超时。常见失效是「adb 命令卡死」：模拟器自带的 adb 与 SDK / PATH 上的
+// 另一份抢 5037，server 版本不一致时 start-server 就能无限等下去——脚本挂死比报错难查得多。
 const ADB_TIMEOUT_MS = 20000;
 // 远端临时文件固定一个名字：每次 dump 覆盖它，不在设备上攒文件
 const REMOTE_DUMP = '/sdcard/mobile-ui-dump.xml';
@@ -141,9 +142,9 @@ const err = mkLog((s) => console.error(s));
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 const readText = (file) => { try { return readFileSync(file, 'utf8'); } catch { return ''; } };
 
-/** 卡死/超时的统一处置：5037 被另一份 adb server 占着（雷电自带 vs scoop/平台工具） */
+/** 卡死/超时的统一处置：5037 被另一份 adb server 占着（模拟器 / SDK / PATH 上的第二份） */
 function adbTimeoutHint() {
-  err.warn('adb 命令超时（' + ADB_TIMEOUT_MS + 'ms 未返回）——本机最常是 5037 端口被另一份 adb server 占着。');
+  err.warn('adb 命令超时（' + ADB_TIMEOUT_MS + 'ms 未返回）——常见是 5037 端口被另一份 adb server 占着。');
   err.detail('处置：`adb kill-server` 后只保留一份 adb（用 MOBILE_UI_ADB=<绝对路径> 指定），或 `adb -P 5038 start-server` 起独立 server。');
 }
 
@@ -331,7 +332,7 @@ const HELP = [
   '',
   '环境变量：',
   '  MOBILE_UI_SERIAL    adb 序列号；多设备必填，每条 adb 都带 -s（不带会报 more than one device/emulator）',
-  '  MOBILE_UI_ADB       adb 可执行文件，默认 adb（雷电自带的那份常与 scoop/平台工具抢 5037）',
+  '  MOBILE_UI_ADB       adb 可执行文件，默认由 $ANDROID_HOME / PATH 解析（多份 adb 抢 5037 时用此项指定唯一一份）',
   '  MOBILE_UI_DUMP_FILE 快照路径，默认 e2e/artifacts/mobile-uidump.xml（已在 .gitignore）',
   '',
   '退出码：0 = 成功；1 = 失败（dump 拿不到 <node> / tap 没找到 / 非法正则 / adb 超时或缺失）',

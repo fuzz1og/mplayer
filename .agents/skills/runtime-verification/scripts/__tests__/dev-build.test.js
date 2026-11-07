@@ -443,7 +443,7 @@ test('findSymbolInApk：解压后扫条目（store 与 deflate 都要命中）�
 
 test('adbBinaryFor：MOBILE_ADB 钉死二进制路径；未设/空串回落 PATH 上的 adb（缺陷 8）', async () => {
   const { adbBinaryFor } = await rulesPromise;
-  const pinned = 'D:\\leidian\\LDPlayer14\\adb.exe';
+  const pinned = (process.env.TMPDIR || process.env.TEMP || '/tmp') + '/pinned-adb.exe';
   assert.equal(adbBinaryFor({ MOBILE_ADB: pinned }), pinned);
   assert.equal(adbBinaryFor({ MOBILE_ADB: 'adb' }), 'adb');
   assert.equal(adbBinaryFor({}), 'adb');
@@ -454,7 +454,7 @@ test('adbBinaryFor：MOBILE_ADB 钉死二进制路径；未设/空串回落 PATH
 
 test('gradleBinaryFor：MOBILE_GRADLE 钉死二进制路径；未设回落 android 目录下的 gradlew(.bat)（缺陷 8）', async () => {
   const { gradleBinaryFor, gradleExecutable } = await rulesPromise;
-  const pinned = 'D:\\tools\\gradle\\bin\\gradle.bat';
+  const pinned = (process.env.TMPDIR || process.env.TEMP || '/tmp') + '/pinned-gradle.bat';
   assert.equal(gradleBinaryFor({ MOBILE_GRADLE: pinned }, 'D:\\repo\\android', 'win32'), pinned);
   assert.equal(gradleBinaryFor({}, 'D:\\repo\\android', 'win32'), path.join('D:\\repo\\android', 'gradlew.bat'));
   assert.equal(gradleBinaryFor({}, '/repo/android', 'linux'), path.join('/repo/android', './gradlew'));

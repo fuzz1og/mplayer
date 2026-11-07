@@ -34,7 +34,7 @@
  *   …/dev-build.mjs --keep               # 不清理设备上推上去的 APK
  *
  * 环境变量：
- *   MOBILE_ADB=<path>            钉死用哪份 adb（本机常见「雷电自带 adb 与 scoop 的抢 5037」）
+ *   MOBILE_ADB=<path>            钉死用哪份 adb（默认由 $ANDROID_HOME / PATH 自动解析；多份 adb 抢 5037 时用它选定唯一一份）
  *   MOBILE_GRADLE=<path>         钉死 gradle（默认 android 目录下的 gradlew / gradlew.bat）
  *   ↑ 这两个变量**只钉死二进制路径**（多份 adb 抢 5037 时用来选定用哪份），
  *     **不是** 5037 争抢的自动处置 —— 脚本不检测争抢、不重试。争抢的诊断与处置在

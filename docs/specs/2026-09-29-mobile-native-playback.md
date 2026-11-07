@@ -2,7 +2,7 @@
 
 > 规格日期：2026-09-29 · 类型：实施规格（可直接开工）· 关联：**#405**（根因票）、PR #433 / PR #436（将被关闭，本规格抢救其结论与不变量）、PR #435（已 CLOSED，其改动由 P0 重落）
 > 依据（三份调研已含全部证据，本文件不重复论证）：`docs/research/2026-09-27-android-background-playback.md`（平台机制）、`docs/research/2026-09-28-mobile-native-playback-options.md`（B/C/C′ 选型 + 仓库改动面 + C 的 Kotlin/JS 量级）、`docs/research/2026-09-28-android-oss-background-playback.md`（16 个开源实现代码级对照）
-> 口径：仓库结论给 `file:line`（master 实测，除注明外；工作副本 `D:\Playground\mplayer` master `9e6d321`）；外部结论给一手链接；拿不准的写「待定/推断」。**本文件不写实现代码**，只写接口签名、伪代码片段与验收判据。
+> 口径：仓库结论给 `file:line`（master 实测，除注明外；仓库检出根目录（`git rev-parse --show-toplevel`）master `9e6d321`）；外部结论给一手链接；拿不准的写「待定/推断」。**本文件不写实现代码**，只写接口签名、伪代码片段与验收判据。
 
 ## 1. 目标与不变量
 
