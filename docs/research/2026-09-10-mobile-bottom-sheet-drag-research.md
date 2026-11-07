@@ -4,7 +4,7 @@
 >
 > 调研员：mobile-bottom-sheet-drag-research · 日期：2026-09 · 状态：仅文档，未改代码
 >
-> **代码定位提示**：本文描述的 `useDragToDismiss.ts` / `gestures/dragSession.ts` 不在主 checkout，而在 worktree `.claude/worktrees/mobile-drag-session`（分支 `refactor/mobile-drag-session`，HEAD `12602ee`，issue #301）。该 worktree 在调研期间有**未提交**改动（新增 `claimMode`），详见 §4。
+> **代码定位提示**：本文描述的 `useDragToDismiss.ts` / `gestures/dragSession.ts` 不在主 checkout，而在 worktree `.worktrees/mobile-drag-session`（分支 `refactor/mobile-drag-session`，HEAD `12602ee`，issue #301）。该 worktree 在调研期间有**未提交**改动（新增 `claimMode`），详见 §4。
 >
 > 证据口径：凡标「一手（本地源码）」者，均可在本机 `node_modules/react-native`（版本 0.86.2，`packages/mobile/package.json` 声明 `react-native: 0.86.2`）中逐行核对；同时给出上游 tag `v0.86.2` 的 GitHub URL。二手来源单独标注。
 
@@ -309,7 +309,7 @@ worktree 有未提交改动（调研期间出现/变化，三文件 +50/−4）�
 | `packages/mobile/node_modules/expo-router/node_modules/@expo/ui/src/community/bottom-sheet/README.md`（@expo/ui 57.0.12） | drop-in for gorhom；三平台原生实现；`BottomSheetHandle`=No；`enable*PanningGesture`=no effect | §2.3 §2.4 |
 | `…/@expo/ui/src/community/bottom-sheet/BottomSheet.ios.tsx` / `BottomSheet.android.tsx` | `presentationDragIndicator` / `interactiveDismissDisabled`；`showDragHandle` / `sheetGesturesEnabled` | §2.3 |
 | `…/@expo/ui/src/jetpack-compose/ModalBottomSheet/index.tsx` | `showDragHandle`(default true) / `sheetGesturesEnabled`(default true) / `DragHandle` slot | §2.3 §2.5 |
-| `.claude/worktrees/mobile-drag-session/packages/mobile/{components/BottomSheet.tsx,hooks/useDragToDismiss.ts,gestures/dragSession.ts}` | 本仓库实现与未提交改动 | §三 §四 R3 |
+| `.worktrees/mobile-drag-session/packages/mobile/{components/BottomSheet.tsx,hooks/useDragToDismiss.ts,gestures/dragSession.ts}` | 本仓库实现与未提交改动 | §三 §四 R3 |
 | `packages/mobile/components/PlayerOverlay.tsx`、`packages/mobile/theme/motion.ts`、`scripts/mobile-e2e.sh`、`docs/adr/2026-08-23-design-motion-presets.md`、`docs/adr/2026-08-26-mobile-bottom-sheet-shell.md`、issue #301 | 对照基准、约束、e2e 注入坐标 | §三 §四 §五 |
 
 ### 一手：上游源码 URL（tag `v0.86.2`，均已验证 200）

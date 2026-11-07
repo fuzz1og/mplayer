@@ -293,7 +293,7 @@ export class DownloadService {
   updateDownloadPath(newPath: string): void {
     // 审查修复：移除 `resolved.includes('..')` 子串检查——path.resolve 已规范化
     // 路径（真正的 `..` 穿越在 resolve 后不复存在），而该子串匹配会误拒合法路径
-    //（如 `C:\Users\foo..bar`）。用户本就有权选择任意下载目录，仅要求非空绝对路径。
+    //（如 `C:\Users\example..bar`）。用户本就有权选择任意下载目录，仅要求非空绝对路径。
     if (typeof newPath !== 'string' || newPath.trim() === '') {
       throw new Error('下载路径无效');
     }

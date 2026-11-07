@@ -14,7 +14,7 @@ description: MPlayer 发版全流程——文档同步、验证、bump、推 tag
    - 入口用 `npm run release`（`./scripts/release.sh` 是 shim；Windows 上别用 bash 调它——那个 bash 可能是 WSL 的，见 #500）
    - 内部按序执行：分支检查（必须 master）→ 验证（`scripts/verify.mjs`）→ `node scripts/version-bump.js`（同步 package.json / package-lock.json / app.json / mobile+core package.json 共 5 处）→ commit → push master → 打 tag → push tag
 3. **监控构建**：`gh run list --workflow=release.yml --limit 1` 取 run id，再用 `gh run view <id> --json status,conclusion` 轮询（要分片状态就 `.jobs[]`）——`gh run watch` 每 20s 重印整棵 job 树，读回来几乎全是重复
-4. **写 release 介绍**（publish job 结束后必做——CI 的 `generate-notes` 只是兜底平铺 PR 列表）：按本文末「介绍规格」收集 `git log v{prev}..v{ver}` 与 `gh release view v{ver} --json assets`，写进临时文件后 `gh release edit v{ver} --notes-file <file>` 覆盖。
+4. **写 release 介绍**（publish job 结束后必做——CI 的 `generate-notes` 只是兜底平铺 PR 列表）：按本文末「介绍规格」收集 `git log v{prev}..v{ver}` 与 `gh release view v{ver} --json assets`，写进临时文件后先跑 `node scripts/check-privacy.mjs --text <file>`，再用 `gh release edit v{ver} --notes-file <file>` 覆盖。
 5. **验证产物**：`gh release view <tag>`（桌面三平台 + APK `MPlayer-v{ver}.apk` + AAB `MPlayer-v{ver}.aab`，AAB 供上架 Google Play）
 
 提交走文档直推（`docs:` 前缀直接 push `master`），不需要 issue 与 worktree。

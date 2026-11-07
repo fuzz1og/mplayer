@@ -343,7 +343,7 @@
 1. **`prefetchPlayableSong` 与移动端无关**。题面把它列为「解析链调用」之一，但全库 grep 显示移动端 0 调用点；移动端预取 = `audioPlayer.ts:350-375` + `songResourcesCache`（12h TTL，`CONTEXT.md:80`）。B/C 的「预解析未来 N 首」应当**复用这条链**（`resolvePlayableUrlMobile` → `setCachedResource`），而不是引入 core 预取缓存。
 2. **「expo-audio 后台不投递事件」这个表述与源码有张力**：`AudioPlayer.kt:147-156` 在 `STATE_ENDED`（`justFinished`）时**同步** `sendStatusUpdate`，即原生侧确实发了一次 `didJustFinish`；只有周期性心跳（`BaseAudioPlayer.kt:52-69`，`if (playing)`）会在停止后归零。因此后台「零事件」更可能是**JS 运行时被冻结 / 事件在 JSI 队列里积压**（与 `docs/research/2026-09-27-android-background-playback.md:452` 的 H1/H3 假说同族），而不是原生不发（推断；需要 `adb shell am set-inactive` 类实验或前台补跑日志来区分）。**但结论不变**：JS 被冻结时任何 JS 侧推进都不可能，原生持队列仍是正解。
 3. **master 上已存在两条针对 #405 的分支**（未合入）：
-   - `fix/background-advance`（`bf00cea`，worktree `.claude/worktrees/background-advance`）：JS 侧同步换源 + 预取提前到剩余 15s，改 `audioPlayer.ts` +335 行，并写了 ADR `docs/adr/2026-09-27-mobile-background-track-advance.md`（其「备选与否决」一节已否决「媒体会话接管（让原生持有队列）」为**独立议题**）。
+   - `fix/background-advance`（`bf00cea`，worktree `.worktrees/background-advance`）：JS 侧同步换源 + 预取提前到剩余 15s，改 `audioPlayer.ts` +335 行，并写了 ADR `docs/adr/2026-09-27-mobile-background-track-advance.md`（其「备选与否决」一节已否决「媒体会话接管（让原生持有队列）」为**独立议题**）。
    - `fix/background-track-advance`（`911d0cd`）：只把两处 `setTimeout(…,0)` 换成微任务，理由写的是「新架构下宿主侧 timer 在 `onHostPause` 被暂停」。
    - 两者都**没有**引入原生队列，与本评估的 B/C 不重叠，但它们的真机结论/ADR 是 B/C 必须引用或反转的既有决策（推断：至少需要在新 ADR 的「备选与否决」里回应）。
 

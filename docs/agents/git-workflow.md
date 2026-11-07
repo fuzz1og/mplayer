@@ -13,18 +13,23 @@
 
 ## 2. 开 worktree
 
+首选 Codex 的 **worktree 模式**（桌面端输入框的 worktree 开关）：Codex 自己创建 worktree 并把会话 cwd 指过去，位置由 Codex 管理（`~/.codex/worktrees/<id>/<repo>`），不需要仓库脚本。
+
+手工创建时用仓库内的 `.worktrees/`（已 gitignore）：
+
 ```bash
 git fetch origin
-git worktree add .claude/worktrees/<slug> -b <type>/<slug> origin/master
-cd .claude/worktrees/<slug>
+git worktree add .worktrees/<slug> -b <type>/<slug> origin/master
+cd .worktrees/<slug>
 ```
 
 完成标准：worktree 已建好，新分支基于最新 `origin/master`。
 
+- 不要创建 `.claude/worktrees/`、`.agents/worktrees/`、`.dsh-worktrees/` 或仓库内 `.codex/worktrees/`：项目 `.codex/hooks.json` 的 PreToolUse 守卫会拒绝这类 `git worktree add`。要全局生效，把同一段 hook 合并到 `~/.codex/hooks.json`。
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/` `perf/`（与 commit type 同表；`perf/` 是本仓既有的性能类分支前缀），slug 用短英文（如 `fix/mobile-parity-tier3`）。
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - **分支名要在第一次 `git push -u` 之前就定对**——推上去之后**改不了 PR 的 head**：`gh pr edit` 没有 `--head` 参数，API `PATCH /repos/{o}/{r}/pulls/{n}` 传 `head=<分支>` 也会**静默忽略**（返回 200 但 `head.ref` 不变）。实测唯一可行路子是**关掉旧 PR、用新分支名重开**，代价是丢掉原 PR 编号与它的评论线程。所以命名别指望事后补救；开 PR 前先对照上一行核一遍。
-- `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
+- `.worktrees/` 已 gitignore，是手工 worktree 的默认位置；原生构建路径太长时改用短路径检出（见 `testing.md`）。
 - worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `runtime-verification` skill）。
 - **跳过 `npm install` 会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
 - **rebase 到「动过 `packages/core` 的新 master」之后必须重跑 `core:build`**：Metro 吃 `packages/core/dist`，而 TypeScript 从 `core/src` 解析——两条路不一致时 `typecheck` 与 CI **全绿**，真机却 **runtime undefined** 崩在第一个用到新导出量的地方（实测：#507 把 `COVER_SIZE` 加进 core，rebase 后未重建 dist 的 worktree 首启直接 `Render Error: Cannot read property 'row' of undefined`）。`npm run core:build` + 重启 Metro 即解；CI 之所以看不出来，是因为它每步都先 `core:build`。
@@ -64,7 +69,8 @@ git push -u origin <branch>
 gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tmp/pr-body.md
 ```
 
-- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`）——段名与 `pr` skill 同形，会话里挂了它照它的写法走即可；本仓附加项里，关闭关键字、正文预算、附图写在模板的 HTML 注释里，两条门禁是 `## Evidence` 段末的两个 `- [ ]` 勾选项（模板正文、不在注释里）。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
+- **PR 模板是唯一事实源**：正文按 `.github/PULL_REQUEST_TEMPLATE.md` 的三段写（`Summary` / `Evidence` / `Merge Danger`）——段名与 `pr` skill 同形，会话里挂了它照它的写法走即可；本仓附加项里，关闭关键字、正文预算、附图写在模板的 HTML 注释里，检查项是 `## Evidence` 段末的 `- [ ]` 勾选项（模板正文、不在注释里）。`gh` **不会**自动套模板——把模板文件直接当 `--body-file` 提交的是模板原件，必须自己按段填。
+- **正文先过脱敏**：写进临时文件后跑 `node scripts/check-privacy.mjs --text <body-file>`；命中就改，别把本机路径带进 PR / issue / release。
 - **面向人写，不写工作日志**：先给结论（改了什么、要 reviewer 做什么），再给细节；一段一个意思；箭头链、名词堆叠与 `文件:行` 留给 ADR 与 issue。**正文预算 ≤ 40 行 / ≤ 1500 字**，CI 已证明的（lint / typecheck / 四套测试 / `core:build` / `build`）不要抄。
 - **`Merge Danger` 必填**：回退代价（`one-way` 走不回去 / `two-way` 能走回去）与影响面（一个词，如 layout shift / 消费端破坏 / 移动端适配）；没有风险也要写 `two-way` + 一个词。争议点 / 高风险点写进 `Summary`（1–3 条）。
 - **长文去该去的地方**：取舍与方案对比写 ADR，排查过程写 issue 评论，正文只留 reviewer 决策所需——**只链接，不复述**。
@@ -88,7 +94,7 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 
 ```bash
 git pull origin master
-git worktree remove .claude/worktrees/<slug>
+git worktree remove .worktrees/<slug>
 git branch -d <type>/<slug>
 git push origin --delete <type>/<slug>   # 远端未随合并自动删除时
 ```

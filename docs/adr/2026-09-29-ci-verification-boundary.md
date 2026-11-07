@@ -133,3 +133,9 @@
   ubuntu 分片永远看不见。**先不进 ruleset**：必需检查仍是 `check` + 四个 `test`，Windows 分片观察一段时间再说。
 - 同批把 `comment-gate` 与 `claim-lint`（各 <200ms）前移到 `.githooks/pre-commit`：它们在近三天的会话里
   分别命中 54 次 / 39 次量级，成本是「改完才发现」的返工，不是缺门禁。边界仍是第 113 行那条——pre-commit 不是闸门。
+
+## 更新（2026-11-07）：static 增加脱敏门禁；worktree 路径统一
+
+`verify -- static` 现在跑 `node scripts/check-privacy.mjs --tracked`，pre-commit 用同一脚本的 `--staged`。
+规则与打码在 `scripts/lib/privacy.mjs`，worktree 根策略在 `scripts/lib/worktree-policy.mjs`
+（项目 `.codex/hooks.json` 的 PreToolUse 也读它）。边界仍是第 113 行：pre-commit 是本地加速，CI 的 `check` 是闸门。

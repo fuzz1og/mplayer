@@ -1,0 +1,17 @@
+{
+  "description": "MPlayer: block manual worktrees under agent-specific roots.",
+  "hooks": {
+    "PreToolUse": [
+      {
+        "hooks": [
+          {
+            "type": "command",
+            "command": "node scripts/worktree-guard.mjs",
+            "statusMessage": "Checking worktree path policy",
+            "timeout": 30
+          }
+        ]
+      }
+    ]
+  }
+}

@@ -8,6 +8,7 @@
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { maskValue } from './lib/privacy.mjs';
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const toRel = (abs) => path.relative(ROOT, abs).split(path.sep).join('/');
@@ -37,8 +38,8 @@ const TABLE_DOC = 'docs/agents/architecture.md';
 /** 有意不记进文件表的实现文件（repo 相对路径）。留空是常态；进这里要写明为什么。 */
 const TABLE_ALLOW = new Set([]);
 
-/** .agents/worktrees 是会话工作区副本，不是仓库内容：CI 全新检出不存在，扫它只会把旧存档的 shim 写法误报成违规。 */
-const SKIP_DIRS = new Set(['node_modules', '__tests__', '__mocks__', 'dist', '.git', 'worktrees']);
+/** 会话工作区副本不是仓库内容：CI 全新检出不存在，扫它只会把旧存档的 shim 写法误报成违规。 */
+const SKIP_DIRS = new Set(['node_modules', '__tests__', '__mocks__', 'dist', '.git', 'worktrees', '.worktrees']);
 
 function walkFiles(absDir, ext, out = []) {
   for (const entry of readdirSync(absDir, { withFileTypes: true })) {
@@ -177,12 +178,6 @@ const SENSITIVE_RULES = [
   { name: '密钥字面量', re: /\b(?:api[_-]?key|secret|token|password|passwd)\b\s*[:=]\s*["']([A-Za-z0-9_+/=-]{16,})["']/gi, value: (m) => m[1], hit: () => true },
 ];
 
-/** 打码：门禁的输出本身不能成为新的泄露点。 */
-function mask(v) {
-  if (v.length <= 6) return v[0] + '*'.repeat(v.length - 1);
-  return v.slice(0, 2) + '*'.repeat(Math.min(8, v.length - 4)) + v.slice(-2);
-}
-
 /** 规则 3：敏感内容扫描（**含**历史存档与文档目录下的未跟踪文件 —— git add -A 的风险面）。 */
 function checkSensitiveContent() {
   const violations = [];
@@ -208,7 +203,7 @@ function checkSensitiveContent() {
           if (!raw || PLACEHOLDER.test(raw) || PLACEHOLDER.test(m[0])) continue;
           if (SENSITIVE_ALLOW.some((a) => a.value === raw)) continue;
           if (!rule.hit(raw)) continue;
-          violations.push(rel + ':' + (i + 1) + '  [' + rule.name + '] ' + mask(raw));
+          violations.push(rel + ':' + (i + 1) + '  [' + rule.name + '] ' + maskValue(raw));
         }
       }
     });

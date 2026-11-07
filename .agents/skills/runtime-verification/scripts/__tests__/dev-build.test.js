@@ -108,9 +108,9 @@ test('devClientUri：url= 整体百分号编码（坑 5 的前置）', async () 
 
 test('shortPathWarning：超阈值才告警，且文案给出处置（坑 4 / 缺陷 6）', async () => {
   const { shortPathWarning, SHORT_PATH_WARN } = await rulesPromise;
-  assert.equal(shortPathWarning('D:\\Playground\\mplayer\\packages\\mobile\\android'), null);
+  assert.equal(shortPathWarning('C:\\repo\\mplayer\\packages\\mobile\\android'), null);
 
-  const deep = 'D:\\Playground\\mplayer\\.claude\\worktrees\\update-prompt\\packages\\mobile\\android';
+  const deep = 'C:\\repo\\mplayer\\.worktrees\\update-prompt\\packages\\mobile\\android';
   assert.ok(deep.length > SHORT_PATH_WARN, '用例前提：该路径确实超阈值');
   const warning = shortPathWarning(deep);
   assert.match(warning, /CMake 对象路径可能超/);
@@ -131,7 +131,7 @@ test('shortPathWarning：阈值边界（等于阈值不告警）', async () => {
 
 test('spawnPlan：Windows 的 .bat/.cmd 经 cmd.exe /d /s /c，并声明 verbatim（缺陷 1）', async () => {
   const { spawnPlan, isBatchFile } = await rulesPromise;
-  const bat = 'D:\\repo\\packages\\mobile\\android\\gradlew.bat';
+  const bat = 'C:\\repo\\packages\\mobile\\android\\gradlew.bat';
   const plan = spawnPlan(bat, ['assembleDebug', '-PreactNativeArchitectures=arm64-v8a'], 'win32');
 
   assert.equal(plan.command, 'cmd.exe');
@@ -161,10 +161,10 @@ test('spawnPlan：POSIX 直 spawn，不套 cmd.exe（缺陷 1）', async () => {
 
 test('spawnPlan：带空格的路径被引起来，仍落在 cmd.exe 的一行里（缺陷 1）', async () => {
   const { spawnPlan } = await rulesPromise;
-  const plan = spawnPlan('C:\\my tools\\android\\gradlew.bat', ['assembleDebug'], 'win32');
+  const plan = spawnPlan('C:\\Program Files\\my tools\\android\\gradlew.bat', ['assembleDebug'], 'win32');
   assert.equal(plan.command, 'cmd.exe');
   // 整体引号 + 路径引号：cmd 的 /s 语义剥掉最外层后剩下 "路径" args，实测两种路径都对
-  assert.equal(plan.args[3], '""C:\\my tools\\android\\gradlew.bat" assembleDebug"');
+  assert.equal(plan.args[3], '""C:\\Program Files\\my tools\\android\\gradlew.bat" assembleDebug"');
   assert.equal(plan.verbatim, true);
 });
 
@@ -455,8 +455,8 @@ test('adbBinaryFor：MOBILE_ADB 钉死二进制路径；未设/空串回落 PATH
 test('gradleBinaryFor：MOBILE_GRADLE 钉死二进制路径；未设回落 android 目录下的 gradlew(.bat)（缺陷 8）', async () => {
   const { gradleBinaryFor, gradleExecutable } = await rulesPromise;
   const pinned = (process.env.TMPDIR || process.env.TEMP || '/tmp') + '/pinned-gradle.bat';
-  assert.equal(gradleBinaryFor({ MOBILE_GRADLE: pinned }, 'D:\\repo\\android', 'win32'), pinned);
-  assert.equal(gradleBinaryFor({}, 'D:\\repo\\android', 'win32'), path.join('D:\\repo\\android', 'gradlew.bat'));
+  assert.equal(gradleBinaryFor({ MOBILE_GRADLE: pinned }, 'C:\\repo\\android', 'win32'), pinned);
+  assert.equal(gradleBinaryFor({}, 'C:\\repo\\android', 'win32'), path.join('C:\\repo\\android', 'gradlew.bat'));
   assert.equal(gradleBinaryFor({}, '/repo/android', 'linux'), path.join('/repo/android', './gradlew'));
   // 空串按未设处理
   assert.equal(gradleBinaryFor({ MOBILE_GRADLE: '' }, '/repo/android', 'darwin'), path.join('/repo/android', './gradlew'));

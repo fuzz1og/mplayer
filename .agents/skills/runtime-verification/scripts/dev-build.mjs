@@ -89,7 +89,7 @@ import {
 
 /**
  * 仓库根：本文件在 `<root>/.agents/skills/runtime-verification/scripts/` 下，向上**固定 4 层**。
- * 「4」与 skill 包的位置是一对耦合：skill 包一挪（改到 `.claude/skills/`、摊平成 `skills/<name>/`、
+ * 「4」与 skill 包的位置是一对耦合：skill 包一挪（改到 `.agents/skills/`、摊平成 `skills/<name>/`、
  * 或目录名变化后位置不同），这里必须同步改。耦合断掉的症状不是「根算错」，而是最后报
  * 「APK 不存在：…\packages\mobile\android\app\build\…」—— 看着像构建失败，其实是根错了一层。
  */

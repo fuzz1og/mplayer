@@ -21,6 +21,7 @@
   **After:**
 - [ ] 真机 / UI 有可视证据 → 已附图（或「未做 + 一句原因」），并写明证据来自哪一层（真 Electron / 打包产物 / Chromium+stub / 真机 + 哪个 runtime）
 - [ ] 行为 / 命令 / 架构有变化 → 已同步 `AGENTS.md` / `GLOSSARY.md` / 相关 ADR
+- [ ] 正文已过 `node scripts/check-privacy.mjs --text <body-file>`（无本机用户目录 / 已知 dev 根 / 设备型号 / 会话 worktree 名）
 
 ## Merge Danger
 

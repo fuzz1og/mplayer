@@ -54,8 +54,8 @@ export const DEV_BUILD = {
 
 /**
  * CMake 对象路径上限 250 字符。实测数据点：主克隆
- * `…\mplayer\packages\mobile\android`（43 字符）正常；`.claude\worktrees\<name>\packages\mobile\android`
- * （78 字符）必失败（`CMAKE_OBJECT_PATH_MAX` / `build.ninja still dirty after 100 tries`）。
+ * `…\mplayer\packages\mobile\android`（43 字符）正常；`.worktrees\<name>\packages\mobile\android`
+ * （71 字符）必失败（`CMAKE_OBJECT_PATH_MAX` / `build.ninja still dirty after 100 tries`）。
  * 真阈值落在两者之间、未做二分实测 —— 所以只**告警**不拦。
  */
 export const SHORT_PATH_WARN = 60;
@@ -216,7 +216,7 @@ export function shortPathWarning(androidDir) {
   return `android 目录路径 ${dir.length} 字符（> ${SHORT_PATH_WARN}）：CMake 对象路径可能超 Windows 250 上限`
     + `，构建会报 CMAKE_OBJECT_PATH_MAX / build.ninja still dirty。`
     + `\n  处置分两层，只做第一层会掉进第二层：`
-    + `\n  ① 先换短路径检出（如 D:\\npw）—— 但**别**换成一个杂牌短路径检出后再出包：`
+    + `\n  ① 先换短路径检出（如 C:\\Program Files\\short）—— 但**别**换成一个杂牌短路径检出后再出包：`
     + `\n     短路径检出里 autolinking 扫不到 native-player / splashscreen 这类模块，出出来的 APK`
     + `\n     启动即崩「ClassNotFoundException: expo.modules.splashscreen」（构建日志一切正常）。`
     + `\n  ② 正解是**在主克隆里建临时分支构建**：原生目录与 node_modules 都齐，路径也短。`

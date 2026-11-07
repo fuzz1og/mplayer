@@ -689,7 +689,7 @@ describe('UpdateService', () => {
   });
 
   describe('启动检查流程（#579）', () => {
-    const INSTALLER = 'C:\\Users\\u\\AppData\\Local\\mplayer-updater\\pending\\MPlayer-Setup-1.9.0.exe';
+    const INSTALLER = 'C:\\Users\\example\\AppData\\Local\\mplayer-updater\\pending\\MPlayer-Setup-1.9.0.exe';
 
     it('无新版本时既不下载也不安装', async () => {
       const { autoUpdater } = await import('electron-updater');
