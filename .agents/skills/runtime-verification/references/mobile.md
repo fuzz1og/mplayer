@@ -162,7 +162,7 @@ node .agents/skills/runtime-verification/scripts/dev-build.mjs
 
 ### 构建产物
 
-- **CMake 250 字符对象路径上限（含绕开后的第二层坑）**：在深层 worktree（如 `.claude/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（或 `Filename longer than 260 characters`）。修法：**在短路径检出构建**（主克隆、`subst` 短盘符、`D:\npw` 这种），别在 `.claude/worktrees/<长名>` 里硬试。⚠️ **绕开它的第二层坑**：把源码复制到短路径（游离副本）构建出的 APK **启动即崩** `ClassNotFoundException: expo.modules.splashscreen`——autolinking 认的是检出结构，副本里模块收不全。**正解是在主克隆里建临时分支构建**，不是复制目录。
+- **CMake 250 字符对象路径上限（含绕开后的第二层坑）**：在深层 worktree（如 `.agents/worktrees/<name>`）里跑 `./gradlew assembleDebug` 会因原生模块对象路径过长失败，症状是 CMake 警告 `CMAKE_OBJECT_PATH_MAX` + `ninja: error: manifest 'build.ninja' still dirty after 100 tries`（或 `Filename longer than 260 characters`）。修法：**在短路径检出构建**（主克隆、`subst` 短盘符、`D:\npw` 这种），别在 `.agents/worktrees/<长名>` 里硬试。⚠️ **绕开它的第二层坑**：把源码复制到短路径（游离副本）构建出的 APK **启动即崩** `ClassNotFoundException: expo.modules.splashscreen`——autolinking 认的是检出结构，副本里模块收不全。**正解是在主克隆里建临时分支构建**，不是复制目录。
 - **验证隧道别用手机侧 nc**：Android toybox nc 静默失败。以 Metro bundling 日志 + ReactNativeJS 日志为准。
 
 ### 取证：dump / 手势 / 生命周期

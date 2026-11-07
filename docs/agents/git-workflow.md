@@ -13,20 +13,26 @@
 
 ## 2. 开 worktree
 
+首选 Codex 的 **worktree 模式**（桌面端输入框的 worktree 开关）：Codex 自己创建 worktree 并把会话 cwd 指过去，位置由 Codex 管理（`~/.codex/worktrees/<id>/<repo>`），不需要仓库脚本。
+
+手工创建时用 `.agents/worktrees/`：
+
 ```bash
 git fetch origin
-git worktree add .claude/worktrees/<slug> -b <type>/<slug> origin/master
-cd .claude/worktrees/<slug>
+git worktree add .agents/worktrees/<slug> -b <type>/<slug> origin/master
+cd .agents/worktrees/<slug>
 ```
 
 完成标准：worktree 已建好，新分支基于最新 `origin/master`。
 
+- 不要用 `.claude/worktrees/` 或 `.dsh-worktrees/`。`.agents/worktrees/` 是 harness 管理的本地会话目录；如果当前 checkout 没有它的本地 ignore（`.agents/worktrees/.gitignore`），把手工 worktree 放到仓库外，避免把副本带进提交。
 - 分支命名 `<type>/<slug>`：`feat/` `fix/` `docs/` `chore/` `refactor/` `perf/`（与 commit type 同表；`perf/` 是本仓既有的性能类分支前缀），slug 用短英文（如 `fix/mobile-parity-tier3`）。
 - 一个任务一个新 worktree + 新分支；不在旧分支上叠新工作。
 - **分支名要在第一次 `git push -u` 之前就定对**——推上去之后**改不了 PR 的 head**：`gh pr edit` 没有 `--head` 参数，API `PATCH /repos/{o}/{r}/pulls/{n}` 传 `head=<分支>` 也会**静默忽略**（返回 200 但 `head.ref` 不变）。实测唯一可行路子是**关掉旧 PR、用新分支名重开**，代价是丢掉原 PR 编号与它的评论线程。所以命名别指望事后补救；开 PR 前先对照上一行核一遍。
-- `.claude/worktrees/` 已 gitignore，是默认的 worktree 位置。
-- worktree 缺 node_modules 就地 `npm install`，不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `runtime-verification` skill）。
-- **跳过 `npm install` 会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
+- `.agents/worktrees/` 是手工 worktree 的默认位置（本地 ignore 由 harness 维护）；`.claude/worktrees/` 不再使用。
+- worktree 缺 node_modules 就地 `npm ci --ignore-scripts`（或 `npm install`），不要从主克隆复制（依赖漂移）；软链同理——真机调试时 `expo-router` 按「被转换文件的真实路径」反推 app root，会把源码解析回主克隆、打包到主克隆的 `app/`（见 `runtime-verification` skill）。
+- **跳过依赖安装会让类型检查静默对着主克隆的 core 跑**：worktree 没有自己的 `node_modules` 时，`@mplayer/core` 会沿目录向上解析到主克隆的 `node_modules/@mplayer/core`（指向主克隆的 `packages/core`），于是 `typecheck` / `typecheck:mobile` 检查的是**主克隆的 core，而不是你正在改的那份**——改了 core 的公开接口却全绿（或反之报一堆莫名其妙的错）都出自这里。绕开安装只做局部验证时，**以 CI 为准**（CI 会 `npm ci` + `core:build`）。
+- **worktree 不继承 node_modules，hook 也不替你装依赖**：linked worktree 共享主 clone 的 `core.hooksPath`，所以 pre-commit 会跑；但缺依赖时它会在 `npx tsc` 处失败，或解析到主 clone 的 core。进入 worktree 先 `npm ci --ignore-scripts`；主 clone 未设过 hook 时再 `git config core.hooksPath .githooks`。按提示装依赖，不要用 `--no-verify` 绕过；真正的闸门是 CI。
 - **rebase 到「动过 `packages/core` 的新 master」之后必须重跑 `core:build`**：Metro 吃 `packages/core/dist`，而 TypeScript 从 `core/src` 解析——两条路不一致时 `typecheck` 与 CI **全绿**，真机却 **runtime undefined** 崩在第一个用到新导出量的地方（实测：#507 把 `COVER_SIZE` 加进 core，rebase 后未重建 dist 的 worktree 首启直接 `Render Error: Cannot read property 'row' of undefined`）。`npm run core:build` + 重启 Metro 即解；CI 之所以看不出来，是因为它每步都先 `core:build`。
 - 调试/测试必须在 worktree 内构建运行，不要 cd 回主克隆目录（缓存不一致难排查）。
 - **Metro 必须在 `packages/mobile` 里起**，不要在 worktree 根目录跑 `npx expo start`：根 `package.json` 的 `main` 指不到 app 入口（`ConfigError: Cannot resolve entry file`），而且 Expo 会顺手改写根 `tsconfig.json`（`extends` 改成 `expo/tsconfig.base`）并把 worktree 弄脏——记得 `git checkout -- tsconfig.json`。
@@ -88,7 +94,7 @@ gh pr create --base master --title "<type(scope): 中文摘要>" --body-file /tm
 
 ```bash
 git pull origin master
-git worktree remove .claude/worktrees/<slug>
+git worktree remove .agents/worktrees/<slug>
 git branch -d <type>/<slug>
 git push origin --delete <type>/<slug>   # 远端未随合并自动删除时
 ```

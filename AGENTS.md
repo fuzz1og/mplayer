@@ -9,7 +9,7 @@ MPlayer 是一个跨平台音乐播放器（桌面 Electron + React，移动端 
 命令以 `package.json` 的 scripts 为准（`npm run`）。只有环境自己说不出来的四条：
 
 - 验证唯一入口 `npm run verify -- <scope>`（`all` = static + 四套测试 + Expo 依赖一致性），实现在 `scripts/verify.mjs`；`scripts/verify.sh` 是等价写法的 shim。**Windows 上别用 bash 调它**——那个 bash 可能是 WSL 的（#500）。分片与 CI job 的对应见 `docs/agents/testing.md`，边界理由见 ADR `docs/adr/2026-09-29-ci-verification-boundary.md`。
-- pre-commit 钩子（`.githooks/pre-commit`）是本地加速，不是闸门——闸门是 CI 的必需状态检查。
+- pre-commit 钩子（`.githooks/pre-commit`）是本地加速，不是闸门——闸门是 CI 的必需状态检查。新 worktree 先 `npm ci --ignore-scripts`；缺依赖时 hook 会失败，别用 `--no-verify` 当默认路径。
 - 图标：只改 `resources/icon.svg`，跑 `python resources/generate_icon.py` 重建全部位图产物，产物不手改。
 - 发版：见 `release` skill。依赖升级治理见 ADR `docs/adr/2026-09-29-dependency-update-governance.md`。
 
@@ -56,6 +56,7 @@ IPC 通道契约（musicApi 单通道 + 语义通道 + push）见 `docs/agents/a
 **只有文档类修改可以直接 push `master`；其余修改（含 bugfix）一律从最新 `master` 建 worktree，完成后 PR，CI 绿后等人工审核，不自行合并。**
 
 - **Issue 先行**：动手前开/认领 GitHub issue；跨端契约/IPC/来源路由先写 ADR。标题前缀：模板预置的 `[Bug]:` / `[Feature]:`，另有 `[Perf]:` / `[Tooling]:` / `[Chore]:`。
+- **worktree**：优先 Codex 原生 worktree 模式；手工创建用 `.agents/worktrees/<slug>`，不要把 worktree 放进 `.claude/worktrees`。linked worktree 共享主 clone 的 `core.hooksPath`，但不共享 `node_modules`；进入后先 `npm ci --ignore-scripts`，主 clone 未设过 hook 再 `git config core.hooksPath .githooks`。原因与完整流程见 `docs/agents/git-workflow.md`。
 - **敏感信息不入库**：tier3 订阅地址、API key、本地缓存。机械门禁见 `scripts/docs-gate.mjs` 的敏感扫描（**含** `docs/{adr,research,specs,wayfinder}` 存档与文档目录下的未跟踪文件），命中即 CI 红。
 - **验收截图不入库，活文档配图入库**：真机验收 / UI 走查的**证据图**传 **PR 正文或验收评论**（`gh pr edit <PR> --attach '<png>#<图注>'`）——PR 是它的一次性载体，入库只会攒下一堆没人再看第二眼的二进制。反过来，**活文档正文长期引用的产品图**（README 截图、logo）**必须入库**，放 `docs/assets/`。判据是「有没有一个长期存在的正文在引用它」，不是「它是不是截图」。
 - 分流边界（什么算文档类）、分支命名、Conventional Commits、验证顺序、PR 模板与清理的完整流程见 `docs/agents/git-workflow.md`。
