@@ -158,7 +158,7 @@ ls node_modules/uuid 2>/dev/null || echo ABSENT   # 未安装
 
 | 读数 | 目录 | 命令 | node_modules | 未提交依赖改动 | 结果 |
 | --- | --- | --- | --- | --- | --- |
-| 主读数（CI 同口径，本文 L131） | 干净 worktree `dsh-4a0e5810-cc26` | `npm audit --json --package-lock-only` | 无 | 无 | **39**（0 critical / 5 high / 33 moderate / 1 low） |
+| 主读数（CI 同口径，本文 L131） | 独立干净 worktree | `npm audit --json --package-lock-only` | 无 | 无 | **39**（0 critical / 5 high / 33 moderate / 1 low） |
 | 装依赖环境复核 | 已装依赖的工作区 | `npm audit --json` | 真安装 | 有：`expo-intent-launcher ~57.0.1`（mobile manifest 1 行 + lock 1 条） | **同为 39**，条目名 / severity 逐条一致 |
 
 两次读数同基线、同一份已提交 lock；未提交的 `expo-intent-launcher` **0 新增 0 消解** audit 条目。本期未出现上文「9 → 8 vs 8 → 7」那种版本漂移。按本文 L131，以干净基线 `--package-lock-only` 读数为准；按 manifest 理想树重算与按 lock 的差别只落在 `fixAvailable` 目标（`typescript-eslint@8.36.0` vs `8.14.0`、`@typescript-eslint/type-utils` 区间 `>=5.62.1-alpha.0` vs `>=5.9.2-alpha.0`、部分 `effects`），**不动条目集合与 severity**。
