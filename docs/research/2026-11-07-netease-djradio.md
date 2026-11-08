@@ -4,14 +4,15 @@
 > 样本：`https://music.163.com/#/djradio?id=1003897323`（「AI 陶喆」）
 > 方法：仓库代码审读 + 当日匿名线上实测（零 Cookie / 零登录；Node 一次性 fetch + core dist 的 `createNeteaseDirectClient`）。
 > 性质：社区逆向接口，非官方文档；仅用于学习研究。
+> **实现后差异（2026-11-08，PR #743 / merge `72f1621`）**：本文第 1–6 节保留调研当时的匿名实测与建议；下文「建议」「范围边界」「风险与未验证」「票拆分」凡写「需新增 / 待做 / 首版计划」均指实现前的状态，不代表当前 master。实现后的契约以 ADR `2026-11-07-netease-djradio-content-contract.md` 为准：节目作为 `Song` 复用歌曲收藏并进入「我喜欢的音乐」；四个内容方法进 `CONTENT_METHODS`，三个三态门面进 `BASE_METHODS` 并接桌面 IPC；节目失败按 404/406/网络/unsupported 分屏；全量节目串行拉取后用于播放/下载/保存全部；双端 `hideSwap`、卡片不展示 `programCount`、单期简介归一、接线守卫均已落地。网易订阅、用户主页、完整发现页电台频道、链接导入仍为后续。
 
 ## 0. 结论先行
 
 1. **可行，且匿名可用。** 详情 `GET /api/djradio/v2/get?id=<radioId>`、节目列表 `GET /api/dj/program/byradio?radioId=<id>&limit=&offset=&asc=`、节目详情 `GET /api/dj/program/detail?id=<programId>` 均返回 `code=200`，不需要 Cookie、签名或登录。
 2. **播放可以完全复用现有网易直连。** 用 `program.mainSong.id`（样本中 126/126 等于 `mainTrackId`）作为 `Song.id`；core `resolvePlayableUrl` 对最早与最新两期都返回可播 https CDN URL，音频大小与 128kbps × 时长吻合。**不能把 `program.id` 当歌曲 id**（`song/media/outer/url?id=<programId>` 返回 404）。
-3. **它是「电台 + 节目」，不是「歌单 + 歌曲」。** 节目有 `serialNum`、`duration`、`createTime`、`listenerCount`、`existLyric`、`programDesc`；`description` 是单期简介的纯文本落点，但多数期沿用电台简介（样本 83/126 相同，43/126 有独立简介），不能一律当电台简介。`programDesc` 是它的富文本形态（样本 10/126 非空）。样本 126 期全部 `existLyric=false`，全部免费（`programFeeType=0`、`mainSong.fee=0`、`copyright=1`）。
+3. **它是「电台 + 节目」，不是「歌单 + 歌曲」。** 节目有 `serialNum`、`duration`、`createTime`、`listenerCount`、`existLyric`、`programDesc`；`description` 是单期简介的纯文本落点，但多数期沿用电台简介（样本 83/126 相同，43/126 有独立简介），不能一律当电台简介。`programDesc` 是它的富文本形态（样本 10/126 非空）。样本 126 期全部 `existLyric=false`，全部免费（`programFeeType=0`、`mainSong.fee=0`、`copyright=1`）。实现后 core 把单期简介归一为 `DjRadioProgram.description`：`programDesc` 优先、等于电台 `desc` 时留空。
 4. **页面结构高度可复用。** 桌面沿用 `PageHero + SongList + playerStore`；移动沿用 `CollapsingHero/AlbumHero + SongRow + setQueue/playSong`。播放器、队列、收藏、历史、下载、加入歌单都不需要为新内容面改协议，只要把节目映射成 `Song`。
-5. **真正新增的是契约与入口。** core 需要新增 `DjRadio` / `DjRadioProgram` 数据与直连方法，登记进 `CONTENT_METHODS`（IPC 自动分派）；两端各新增详情页。首版入口建议做**搜索「电台」tab（只展示 top 10）+ 直接路由**；链接导入/发现页电台 tab 可后续加。
+5. **当时真正新增的是契约与入口。** core 需要新增 `DjRadio` / `DjRadioProgram` 数据与直连方法，登记进 `CONTENT_METHODS`（IPC 自动分派）；两端各新增详情页。首版入口建议做**搜索「电台」tab（只展示 top 10）+ 直接路由**；链接导入/发现页电台 tab 可后续加。实现后还把三个三态门面登记进 `BASE_METHODS` 并接桌面 `musicApiHandlers`，搜索/歌手页与详情页均进入本期。
 6. **最大风险是限流与计数口径。** 节目列表快速连打会返回 `code=406`（冷却后恢复）；详情 `programCount=133`，但节目列表 `count=126`，有 7 期不可见，UI 不应直接把 133 当可见期数。付费/下架/登录态未验证。
 
 ## 1. 产品模型与样本
@@ -72,7 +73,7 @@
 | `programFeeType=0` / `feeScope=0` | 126/126 |
 | `mainSong.fee=0` / `copyright=1` | 126/126 |
 
-`programDesc` 是单期简介的富文本数组（如 `[{type:1, content:"..."}]`），列表里通常为 `null`（样本 10/126 非空）；`description` 是同一段简介的纯文本落点，不能假定它等于电台 `desc`（样本 83/126 相同、43/126 不同）。UI 应优先取 `programDesc` 的文本，其次取 `description`；当 `description` 与电台 `desc` 相同视为本期未单独填写简介，不要重复展示电台简介。
+`programDesc` 是单期简介的富文本数组（如 `[{type:1, content:"..."}]`），列表里通常为 `null`（样本 10/126 非空）；`description` 是同一段简介的纯文本落点，不能假定它等于电台 `desc`（样本 83/126 相同、43/126 不同）。UI 应优先取 `programDesc` 的文本，其次取 `description`；当 `description` 与电台 `desc` 相同视为本期未单独填写简介，不要重复展示电台简介。实现后这条归一在 core `neteaseDirect` 完成，桌面/移动分别用行 `title` / `accessibilityLabel` 暴露归一后的单期简介。
 
 ### 1.3 排序与分页
 
@@ -152,7 +153,7 @@ Referer: https://music.163.com/
 
 ### 3.2 歌词
 
-`GET /api/song/lyric?id=3457566808&lv=1&kv=1&tv=-1` 返回 `code=200`、`lrc.lyric=""`（130B）。样本 126 期 `existLyric` 全为 false；另测电台 1 的前 100 期也全为 false，**没有找到 `existLyric=true` 的正样本**。因此「有歌词的节目」未验证；按现有 `getNeteaseLyrics(mainSong.id)` 的按 id 取词路径应当可用，但实现后要另找正样本验真。样本上列表直接给 `lrc=''` 即可，取词由现有歌词预取按需触发（空词会被缓存，不会重复请求）。
+`GET /api/song/lyric?id=3457566808&lv=1&kv=1&tv=-1` 返回 `code=200`、`lrc.lyric=""`（130B）。样本 126 期 `existLyric` 全为 false；另测电台 1 的前 100 期也全为 false，**没有找到 `existLyric=true` 的正样本**。因此「有歌词的节目」未验证；按现有 `getNeteaseLyrics(mainSong.id)` 的按 id 取词路径应当可用，但仍要另找正样本验真。样本上列表直接给 `lrc=''` 即可，取词由现有歌词预取按需触发（空词会被缓存，不会重复请求）。
 
 ### 3.3 映射到现有 `Song`
 
@@ -177,7 +178,7 @@ Referer: https://music.163.com/
 
 ## 4. 与现有内容面的复用点
 
-| 层 | 现有实现 | 电台可复用 / 需新增 |
+| 层 | 调研时基线 | 当时判断：电台可复用 / 需新增（实现后差异见本节末） |
 |---|---|---|
 | core 类型 | `Song`（`packages/core/src/types/index.ts:40`）、`Album`（`:140`）、`DiscoverPlaylist`（`:124`） | 新增 `DjRadio` / `DjRadioProgram`；节目映射成 `Song` 后队列/收藏/下载不改 |
 | core 客户端 | `DirectSourceClient`（`packages/core/src/shared/sourceRouter.ts:216`）、`CONTENT_METHODS`（`:293`） | 新增 `getDjRadioDetail` / `getDjRadioPrograms` / `getDjRadioProgram` / `searchDjRadios`；只有网易实现 |
@@ -189,7 +190,7 @@ Referer: https://music.163.com/
 | 歌手页电台 | `ArtistDetailPage` 现有 Segmented / `ArtistDetailPage` 移动版专辑区 | 新增「电台」tab / 横滑区；`Artist.accountId` 存在且结果非空才显示 |
 | 链接导入 | `packages/core/src/api/playlistImport.ts:21` 只解析 `/playlist` | 可另加 `djradio` 链接解析；不要混进「歌单导入」语义 |
 
-**建议的最小数据契约**（字段级）：
+**调研当时的最小数据契约建议**（字段级；实现后类型见 `packages/core/src/types/index.ts` 与 ADR）：
 
 ```ts
 export interface DjRadio {
@@ -214,27 +215,27 @@ export interface DjRadioDetail {
 
 `DjRadioProgram extends Song` 的好处：桌面 `SongList` / 移动 `SongRow` / `playerStore.setQueue` 可以直接吃；额外字段只用于渲染期号/日期/节目链接，不影响播放。坏处：收藏/历史持久化的是 `SongBase`，重新打开时节目扩展字段会丢失；首版可接受。
 
-身份与缓存：电台和专辑一样是**源内实体**，身份 = `源 + 源内 id`；缓存键必须含源（`djradio_detail_netease_<id>`、`djradio_programs_netease_<id>_<offset>_<limit>_<asc>`），空结果不缓存、406 不缓存、同键单飞。失败返回建议沿用专辑的三态联合：`unsupported | not-found | failed`（详情 404 单独归 `not-found`，不能和网络失败共用一屏）。
+身份与缓存：电台和专辑一样是**源内实体**，身份 = `源 + 源内 id`；缓存键必须含源（`djradio_detail_netease_<id>`、`djradio_programs_netease_<id>_<offset>_<limit>_<asc>`），空结果不缓存、406 不缓存、同键单飞。失败返回建议沿用专辑的三态联合：`unsupported | not-found | failed`（详情 404 单独归 `not-found`，不能和网络失败共用一屏）。实现后 `getDjRadioDetailRouted` / `getDjRadioProgramsRouted` / `getArtistRadiosRouted` 已进 `BASE_METHODS` 与桌面 IPC 分发表，`api/djRadioErrors.ts` 统一四态文案。
 
-**UI 差异（需要明确设计）**：
+**UI 差异（调研时待明确设计；括号为实现后落点）**：
 - `SongRow` 的序号列当前显示 `index + 1`（`src/renderer/components/SongRow.tsx:182`）；默认最新在前时 index 1 对应的是期号 126，不是期号 1。建议给行加 `indexLabel`/`serial` 插槽，或电台页用专用 ProgramRow。
-- 节目单期简介优先取 `programDesc` 的富文本；为空时取 `description`，但 `description === radio.desc` 视为本期未单独填写简介，不要重复展示电台简介。
+- 节目单期简介优先取 `programDesc` 的富文本；为空时取 `description`，但 `description === radio.desc` 视为本期未单独填写简介，不要重复展示电台简介（已由 core `neteaseDirect` 归一，两端只消费 `DjRadioProgram.description`）。
 - 电台页要显示「订阅数 / 可见期数 / 最近更新」；`playCount`、`likedCount` 不可靠，不要展示。
-- 节目音频是网易上传的翻唱/播客，不是目录歌曲；建议在电台页隐藏「换源」（`Song.artist` 是上传者，跨源搜索会找错歌）。
-- 「播放全部」要决定：只播已加载页，还是先拉全 126 期再建队列。126 期全量列表约 740KB，建议按需分页；播放全部可串行拉全量（带缓存/退避），避免队列只剩第一页。
+- 节目音频是网易上传的翻唱/播客，不是目录歌曲；建议在电台页隐藏「换源」（`Song.artist` 是上传者，跨源搜索会找错歌；已由双端 `hideSwap` 落地，收藏动作保留）。
+- 「播放全部」要决定：只播已加载页，还是先拉全 126 期再建队列。126 期全量列表约 740KB，建议按需分页；播放全部可串行拉全量（带缓存/退避），避免队列只剩第一页（已由 `api/djRadioPrograms.ts` 的 `fetchAllDjRadioPrograms` 落地，桌面播放/下载/保存全部、移动播放/下载全部共用；移动保存全部仍为后续）。
 
 ## 5. 入口与双端影响
 
-**路由**：桌面 `/#/djradio/:id`（`src/renderer/router/index.tsx` 加 lazy 页）；移动 `app/djradio/[id].tsx`。路由 state 可带 name/pic/dj 作首屏兜底，详情返回后覆盖（与 AlbumDetailPage 同模式）。
+**路由（调研时建议，已落地）**：桌面 `/#/djradio/:id`（`src/renderer/router/index.tsx` 加 lazy 页）；移动 `app/djradio/[id].tsx`。路由 state 可带 name/pic/dj 作首屏兜底，详情返回后覆盖（与 AlbumDetailPage 同模式）。
 
 **入口优先级**：
 
 1. **歌手搜索名链路**（用户主路径）：搜索歌手名 → 歌手页 → 歌手页「电台」tab / 横滑区 → 电台详情；`accountId` 是这条链路的桥。
 2. **搜索「电台」tab**（辅助入口）：桌面 `DiscoverPageV2` 的二级 tab + 移动搜索页 `SEARCH_TABS`；`POST /api/cloudsearch/pc type=1009` 匿名可用，结果数组直接进新页面。搜索响应 10 条约 17KB，成本可控。
-3. **链接打开/导入**：用户给的就是 `music.163.com/#/djradio?id=...`；可扩展 `parsePlaylistUrl` 的兄弟函数 `parseDjRadioUrl`，但不要把它归到「导入歌单」，否则语义会坏。
-4. **发现页热门/精选电台**：`/api/djradio/recommend/v1`、`/api/djradio/hot/v1` 已实测匿名可用；作为独立发现面后置，避免首版铺太大。
+3. **链接打开/导入（仍为后续，非本期待办清单）**：用户给的就是 `music.163.com/#/djradio?id=...`；可扩展 `parsePlaylistUrl` 的兄弟函数 `parseDjRadioUrl`，但不要把它归到「导入歌单」，否则语义会坏。
+4. **发现页热门/精选电台（仍为后续）**：`/api/djradio/recommend/v1`、`/api/djradio/hot/v1` 已实测匿名可用；完整推荐/热门/分类/榜单频道需要单独信息架构，不在 #742。
 
-**范围边界（用户后续修订）**：首版 = 电台详情页 + 搜索电台入口（top 10）+ 歌手页电台（仅 `accountId` 入驻艺人）+ 直接路由 `/djradio/:id` + 保存全部到新歌单；节目行复用歌曲收藏，不做网易订阅、不做用户主页、不做发现页完整电台频道。
+**范围边界（用户最终拍板，#743 已实现）**：首版 = 电台详情页 + 搜索电台入口（top 10）+ 歌手页电台（仅 `accountId` 入驻艺人）+ 直接路由 `/djradio/:id` + 保存全部到新歌单；节目作为 `Song` 复用歌曲收藏，可进入「我喜欢的音乐」。不做网易订阅、用户主页、独立 `FavoriteRadio`、发现页完整电台频道；链接导入为后续，不是「本期没做完」的缺口。
 
 **双端影响**：
 - core：新增类型/方法/缓存；播放器、原生播放、tier3 都不改。
@@ -244,29 +245,31 @@ export interface DjRadioDetail {
 
 ## 6. 风险与未验证
 
-1. **限流（已实测）**：节目列表连续快速请求出现 `code=406`，冷却后恢复；`limit=200` 单独复核正常返回 126 条，406 不是 limit 上限。本次没有做「节目腿被限时搜索腿是否仍可用」的并发对照，**两条腿的额度是否共享未验证**。必须做 30/50 分页、同键单飞、详情/列表缓存和退避；不要把 406 当空列表。
+1. **限流（已实测，部分已落地）**：节目列表连续快速请求出现 `code=406`，冷却后恢复；`limit=200` 单独复核正常返回 126 条，406 不是 limit 上限。实现已做 30 条首屏分页、同键单飞、详情/列表缓存、节目腿 406 最多两次指数退避与串行间隔；不要把 406 当空列表。**仍未验证**：「节目腿被限时搜索腿是否仍可用」的并发对照，即两条腿的额度是否共享。
 2. **计数口径（已实测）**：`programCount=133` vs 列表 `count=126`；7 期在匿名列表不可见，原因未知（下架/审核/定时/隐私均未证实）。UI 用列表 `total`，不要用详情 `programCount` 承诺「共 133 期」。
 3. **付费/下架（未验证）**：样本全部免费；付费电台/单集的 `radioFeeType`、`feeScope`、`programFeeType`、`buyed`、`authDTO` 行为未测。解析不到 URL 时走现有失败归因/跳歌护栏，不新增猜测。
 4. **歌词（未验证正样本）**：样本 126 期与另一电台前 100 期都 `existLyric=false`；按 id 的歌词路径有正样本前不能宣称「节目歌词可用」。
-5. **`programDesc` / `description`（已实测）**：`programDesc` 是富文本数组（样本 10/126 非空），列表通常为 null；`description` 是纯文本，但 43/126 期与电台 `desc` 不同，不能一律当电台简介。两者都要归一，不能直接当 string 渲染。
+5. **`programDesc` / `description`（已实测，已归一）**：`programDesc` 是富文本数组（样本 10/126 非空），列表通常为 null；`description` 是纯文本，但 43/126 期与电台 `desc` 不同，不能一律当电台简介。core `neteaseDirect` 已归一为 `DjRadioProgram.description`，不直接渲染上游数组。
 6. **`playCount`/`likedCount`（已实测异常）**：样本电台 GET/POST 均为 `playCount=0`、`likedCount=0`（独立复核提到的 509 未在样本响应出现），不能当真实热度。
 7. **非官方接口**：随时可能变；单测全部走 transport 注入、零真实网络（参照 `neteaseContent.test.ts` / `neteasePlaylistSearch.test.ts`）。
-8. **链接解析**：`parsePlaylistUrl` 只认 `/playlist`，新增 `djradio` 要独立解析；`music.163.com/#/djradio?id=` 的 hash 路由必须自己解析 `id`。
-9. **mainSong 潜在重复**：样本 126 期 mainSong id 唯一；一般电台未保证，列表 key / 队列去重要用 `programId` 或 index 兜底，不能假设一号一期。
-10. **收藏/订阅（已确认不做）**：`POST /api/djradio/sub` 匿名返回 `code=301`（需要登录）；现有「我喜欢的音乐」只存歌曲；本地电台收藏需要独立存储域和「我的电台」页，另开票。
+8. **链接解析（后续）**：`parsePlaylistUrl` 只认 `/playlist`，新增 `djradio` 要独立解析；`music.163.com/#/djradio?id=` 的 hash 路由必须自己解析 `id`。它不是 #742 的验收项。
+9. **mainSong 潜在重复（已用 programId 规避）**：样本 126 期 mainSong id 唯一；一般电台未保证，双端电台列表已用 `programId` 作 key，队列身份仍用 `mainSong.id`，不能假设一号一期。
+10. **收藏/订阅（最终决策已落地）**：节目以歌曲身份复用现有收藏，可进入「我喜欢的音乐」；不新增独立 `FavoriteRadio` /「我的电台」页。网易 `POST /api/djradio/sub` 匿名返回 `code=301`（需要登录），MPlayer 无网易登录入口，**订阅本身仍不做**。
 11. **歌手页 accountId（已实测）**：只有入驻艺人返回 `accountId`；不要把 artist id 当 userId 调 `get/byuser`（5196 返回 0 个电台）。无 `accountId` 时隐藏电台区块，不做按名字兜底搜索。
 
-## 7. 建议的后续票拆分
+## 7. 当时建议的票拆分（#743 已整体交付）
 
-| 票 | 范围 | 验收标准 | 依赖 |
-|---|---|---|---|
-| 母票 #742 | 网易云 DJ 电台内容面 | 能搜索歌手名/电台、从歌手页进入电台，看到 Hero + 节目分页；播放全部走现有队列；双端一致 | — |
-| core 契约 | `DjRadio`/`DjRadioProgram`、详情/节目分页/按用户取电台/搜索、`Artist.accountId`、缓存/单飞/错误语义 | 零网络单测覆盖字段映射、`program.id` vs `mainSong.id`、`programCount` vs `count`、404/406、分页 | 母票 |
-| 桌面页 | `/djradio/:id`、Hero、节目行、分页、播放全部、下载全部、保存全部到新歌单 | 真实 Electron 点进样本电台，播放第 1/126 期；保存全部可用 | core |
-| 桌面入口 | 搜索「电台」tab + 歌手页「电台」tab | 搜索「邪热搜索」→ 歌手页 → AI 陶喆；搜索「AI 陶喆」电台能进详情 | core |
-| 移动页 | `app/djradio/[id].tsx`、CollapsingHero、播放全部/下载 | 真机进入样本电台，播放并切后台/锁屏；队列正确 | core |
-| 移动入口 | 搜索「电台」tab + 歌手页电台横滑区 | 真机走歌手名链路进入样本电台 | core |
-| ADR | 跨端契约：`Song` 映射、`accountId`、计数/排序/失败语义、复用歌曲收藏 | ADR 接受并进 `docs/adr/README.md`；GLOSSARY 更新 | 母票 |
+> 下表是调研时给 #742 的拆分建议，PR #743 已按最终契约整体落地；不再把其中任何行当作当前待办。仍未做的边界见 §6 与 ADR「后果」。
+
+| 当时拆分 | 范围 | 验收标准 | 依赖 | 当前状态 |
+|---|---|---|---|---|
+| 母票 #742 | 网易云 DJ 电台内容面 | 能搜索歌手名/电台、从歌手页进入电台，看到 Hero + 节目分页；播放全部走现有队列；双端一致 | — | #743 合入，#742 关闭 |
+| core 契约 | `DjRadio`/`DjRadioProgram`、详情/节目分页/按用户取电台/搜索、`Artist.accountId`、缓存/单飞/错误语义 | 零网络单测覆盖字段映射、`program.id` vs `mainSong.id`、`programCount` vs `count`、404/406、分页 | 母票 | 已实现；四个内容方法进 `CONTENT_METHODS`、三个门面进 `BASE_METHODS` |
+| 桌面页 | `/djradio/:id`、Hero、节目行、分页、播放全部、下载全部、保存全部到新歌单 | 真实 Electron 点进样本电台，播放第 1/126 期；保存全部可用 | core | 已实现；三态门面经 IPC 分屏，`programId` key、`hideSwap`、单期简介、全量队列均落地 |
+| 桌面入口 | 搜索「电台」tab + 歌手页「电台」tab | 搜索「邪热搜索」→ 歌手页 → AI 陶喆；搜索「AI 陶喆」电台能进详情 | core | 已实现并附真 Electron 证据 |
+| 移动页 | `app/djradio/[id].tsx`、CollapsingHero、播放全部/下载 | 真机进入样本电台，播放并切后台/锁屏；队列正确 | core | 页面与入口已实现并有 dev build 证据；**锁屏 / 后台 FGS 仍未单独取证**；移动「保存全部」仍为后续 |
+| 移动入口 | 搜索「电台」tab + 歌手页电台横滑区 | 真机走歌手名链路进入样本电台 | core | 已实现并附 dev build 证据 |
+| ADR | 跨端契约：`Song` 映射、`accountId`、计数/排序/失败语义、复用歌曲收藏 | ADR 接受并进 `docs/adr/README.md`；GLOSSARY 更新 | 母票 | 已接受并实现；索引与 GLOSSARY 已同步 |
 
 ## 8. 参考来源
 
