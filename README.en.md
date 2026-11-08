@@ -75,6 +75,7 @@ Mobile downloads in-app too: the APK lands in the app cache and is verified agai
 - **🔒 Background playback and lock-screen controls** — on Android a hand-written Kotlin module (media3 ExoPlayer owning the queue, native progression, `MediaLibraryService` media session) keeps playback alive and mirrors track changes to the notification and lock screen; iOS falls back to expo-audio
 - **🌗 Dark mode** — a dual-theme token system plus `textVariants` on mobile, following the system or switched manually
 - **⚡ Smart updates** — both apps check once on launch; desktop downloads silently and confirms in-app before installing (channels ranked by measured latency, mirrors first, GitHub direct last), mobile downloads and verifies the APK in-app, then waits for manual hash confirmation before handing it to the system installer
+- **📻 DJ radio** — search NetEase DJ radios, browse programs and play / download a whole radio, with desktop also saving it to a local playlist; artist pages surface the radios an artist publishes, and programs favourite as songs
 
 **Diagnostics and local files**
 
@@ -154,10 +155,10 @@ flowchart LR
 | --- | --- |
 | Playback | Multi-source search, hot charts, three play modes (repeat one / repeat all / shuffle), play next, lyrics with karaoke-style word-by-word fill, global shortcuts, cover-version detection, skip-on-failure (on by default, can be turned off) |
 | Source switching | Per-track switching (full-version preference + playability probing + in-place replacement) |
-| Search | Songs / artists tabs, artist browsing and detail, strict-match backfill for songs without a URL |
+| Search | Songs / artists / playlists / DJ radios tabs, artist browsing and detail (including radios they publish), strict-match backfill for songs without a URL |
 | Favourites / history | Automatic URL refresh written back to the DB; auto-recorded, viewable and clearable |
 | Playlists | Create / delete, drag-and-drop ordering, batch operations (create a playlist in place), filter by title / artist, import from text or links |
-| Discover | Recommendations / charts / new releases / playlists / artists, album pages, one-click save (charts can save everything into a new playlist) |
+| Discover | Recommendations / charts / new releases / playlists / artists, album and DJ radio pages, one-click save (charts can save everything into a new playlist) |
 | Cache | Prefetch cache (instant playback), cover and audio disk cache, stats and clearing |
 | Network | Direct-status panel for all 7 sources, tier3 subscriptions with per-source stats (delivered / discarded / missed / skipped / guard-rejected / health), diagnostic export, HTTP proxy, TLS fingerprint spoofing |
 | Download / local | Single and batch downloads with progress; folder scanning, ID3 parsing, change watching |
@@ -170,7 +171,7 @@ flowchart LR
 - **Dark mode**: follow system / light / dark
 - **Downloads**: saved to the public Downloads folder via SAF; MP3 metadata embedded (title / artist / album / cover) plus a sibling `.lrc` lyrics sidecar; covers shown in the download list
 - **Settings**: direct-source settings (auto / direct per source), tier3 subscriptions with per-source stats (including health), update check (channel picker + latency test), cache, playback log, playback diagnostics
-- **Detail pages**: charts / playlists / albums / artists / discovered playlists
+- **Detail pages**: charts / playlists / albums / artists / discovered playlists / DJ radios
 
 The full route table lives in [docs/agents/architecture.md](docs/agents/architecture.md) (agent-facing) and the `packages/mobile/app/` directory.
 
