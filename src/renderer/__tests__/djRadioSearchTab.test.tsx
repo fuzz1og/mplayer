@@ -88,6 +88,7 @@ describe('搜索结果 电台 tab（#742）', () => {
     await waitFor(() => expect(radioCalls()).toHaveLength(1));
     expect(radioCalls()[0]).toEqual(['searchDjRadios', 'netease', '邪热搜索']);
     expect(await screen.findByText('网易云电台搜索最多展示 10 个结果')).toBeInTheDocument();
+    expect(screen.queryByText(/133 期/)).toBeNull();
 
     fireEvent.click(await screen.findByRole('button', { name: 'AI 陶喆' }));
     expect(await screen.findByTestId('djradio-detail')).toBeInTheDocument();
@@ -100,7 +101,7 @@ describe('搜索结果 电台 tab（#742）', () => {
     renderPage();
 
     fireEvent.click(await screen.findByRole('button', { name: /电台/ }));
-    expect(await screen.findByText(/code=406/)).toBeInTheDocument();
+    expect(await screen.findByText(/操作频繁，请稍后重试/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole('button', { name: '重试' }));
     await waitFor(() => expect(radioCalls()).toHaveLength(2));

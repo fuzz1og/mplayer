@@ -185,8 +185,10 @@ export interface DjRadio {
     avatarUrl: string;
     signature?: string;
   };
+  /** 上游制作计数；与列表可见期数不等，卡片不展示，来源见 ADR 2026-11-07。 */
   programCount: number;
   subCount: number;
+  /** 上游互动计数；本票无消费方，仅保留字段来源，见 ADR 2026-11-07。 */
   shareCount: number;
   commentCount: number;
   createTime: number;

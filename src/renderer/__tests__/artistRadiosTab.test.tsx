@@ -69,7 +69,7 @@ function renderPage() {
   );
 }
 
-const radioCalls = () => callMusicApi.mock.calls.filter((call) => call[0] === 'getArtistRadios');
+const radioCalls = () => callMusicApi.mock.calls.filter((call) => call[0] === 'getArtistRadiosRouted');
 
 beforeEach(() => {
   callMusicApi.mockReset();
@@ -84,7 +84,9 @@ beforeEach(() => {
       };
     }
     if (method === 'getArtistInfo') return artistWithAccount;
-    if (method === 'getArtistRadios') return { radios: [radio], total: 1, more: false, subCount: 0 };
+    if (method === 'getArtistRadiosRouted') {
+      return { ok: true, page: { radios: [radio], total: 1, more: false, subCount: 0 } };
+    }
     throw new Error(`unexpected: ${method}`);
   });
 });
@@ -101,7 +103,7 @@ describe('歌手页 电台分段（#742）', () => {
     expect(await screen.findByRole('heading', { level: 1, name: '邪热搜索' })).toBeInTheDocument();
     const radioTab = await screen.findByRole('radio', { name: '电台' });
     await waitFor(() => expect(radioCalls()).toHaveLength(1));
-    expect(radioCalls()[0]).toEqual(['getArtistRadios', 'netease', '79952226']);
+    expect(radioCalls()[0]).toEqual(['getArtistRadiosRouted', 'netease', '79952226']);
 
     fireEvent.click(radioTab);
     expect(await screen.findByText('共 1 个电台')).toBeInTheDocument();
@@ -121,5 +123,20 @@ describe('歌手页 电台分段（#742）', () => {
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toHaveTextContent('邪热搜索'));
     expect(screen.queryByRole('radio', { name: '电台' })).toBeNull();
     expect(radioCalls()).toHaveLength(0);
+  });
+
+  it('电台失败不静默隐藏，显示歌手页轻量错误态且可重试', async () => {
+    callMusicApi.mockImplementation(async (method: string) => {
+      if (method === 'getArtistSongs') return { songs: [], total: 0 };
+      if (method === 'getArtistInfo') return artistWithAccount;
+      if (method === 'getArtistRadiosRouted') return { ok: false, reason: 'failed', message: 'code=406' };
+      throw new Error(`unexpected: ${method}`);
+    });
+    renderPage();
+    const radioTab = await screen.findByRole('radio', { name: '电台' });
+    fireEvent.click(radioTab);
+    expect(await screen.findByText('加载失败，请稍后重试')).toBeInTheDocument();
+    fireEvent.click(screen.getByRole('button', { name: '重试' }));
+    await waitFor(() => expect(radioCalls()).toHaveLength(2));
   });
 });

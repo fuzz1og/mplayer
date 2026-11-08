@@ -21,7 +21,7 @@ import ArtistListPage from '@/renderer/pages/ArtistListPage';
 import ArtistCard from '@/renderer/components/ArtistCard';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
-import { pickToplistGroup, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS } from '@mplayer/core';
+import { pickToplistGroup, SOURCE_DISPLAY_NAMES, TOPLIST_SOURCE_IDS, describeDjRadioSearchFailure } from '@mplayer/core';
 import type { Album, Song, DiscoverPlaylist, Artist, ChartKind, ToplistGroup, ToplistSourceKey, DjRadio } from '@mplayer/core';
 
 /** 榜单源切换的可选项（#332 选项 A：单元榜 + 源切换）；键域取自 core，不本地维护字面量。 */
@@ -442,7 +442,7 @@ const DiscoverPageV2: React.FC = () => {
       .catch((err: unknown) => {
         if (seq !== radioSearchSeqRef.current) return;
         setRadioResults([]);
-        setRadioError(err instanceof Error ? err.message : '电台搜索失败');
+        setRadioError(describeDjRadioSearchFailure(err instanceof Error ? err.message : '电台搜索失败'));
       })
       .finally(() => {
         if (seq === radioSearchSeqRef.current) setRadioLoading(false);

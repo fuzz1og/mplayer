@@ -74,6 +74,12 @@ interface SongListProps {
   showAlbum?: boolean;
   /** 自定义序号文案（电台节目期号等）；缺省显示 index + 1。 */
   indexLabel?: (song: Song, index: number) => React.ReactNode;
+  /** 电台节目等内容身份；缺省沿用 Song.id，避免列表 key 撞成播放身份。 */
+  rowKey?: (song: Song, index: number) => string;
+  /** 内容面不是目录歌曲时收掉跨源换源动作。 */
+  hideSwap?: boolean;
+  /** 单期简介等行级补充信息；作为 title 属性暴露给鼠标与读屏。 */
+  rowTitle?: (song: Song) => string | undefined;
 }
 
 /**
@@ -112,6 +118,9 @@ const SongList: React.FC<SongListProps> = ({
   showDuration = false,
   showAlbum,
   indexLabel,
+  rowKey,
+  hideSwap = false,
+  rowTitle,
 }) => {
   // library 密度默认无表头；显式 showHeader 才渲染
   const showHeader = showHeaderProp ?? density !== 'library';
@@ -149,6 +158,10 @@ const SongList: React.FC<SongListProps> = ({
   // 归属判断 O(1)：行只拿布尔量，勾选/收藏不再每行 includes 扫描
   const favoriteIdSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
   const selectedIdSet = useMemo(() => new Set(selectedIds), [selectedIds]);
+  const keyOf = useCallback(
+    (song: Song, index: number) => rowKey?.(song, index) ?? song.id,
+    [rowKey],
+  );
 
   // 稳定回调的「最新值」来源：行是 React.memo，回调身份一变整表 memo 即失效
   const latest = useLatest({ selectedIds, onSelectionChange, onSwap, onPlay });
@@ -295,7 +308,7 @@ const SongList: React.FC<SongListProps> = ({
 
   const renderRow = (song: Song, index: number) => (
     <SongRow
-      key={song.id}
+      key={keyOf(song, index)}
       song={song}
       index={index}
       isCurrentSong={currentSongId === song.id}
@@ -310,6 +323,8 @@ const SongList: React.FC<SongListProps> = ({
       variant={density === 'library' ? 'library' : 'standard'}
       compactActions={compactActions}
       showDuration={showDuration}
+      title={rowTitle?.(song)}
+      hideSwap={hideSwap}
       fillTitle={density === 'library'}
       moreOpen={activeDropdown === song.id}
       queue={displaySongs}
@@ -445,7 +460,7 @@ const SongList: React.FC<SongListProps> = ({
                 if (!song) return null;
                 return (
                   <VirtualRow
-                    key={song.id}
+                    key={keyOf(song, item.index)}
                     start={item.start}
                     size={item.size}
                     scrollMargin={virtual.scrollMargin}

@@ -63,7 +63,7 @@ const DjRadioGrid: React.FC<DjRadioGridProps> = ({
         <CoverCard
           key={radio.id}
           title={radio.name}
-          subtitle={[radio.dj.nickname, radio.programCount ? `${radio.programCount} 期` : ''].filter(Boolean).join(' · ') || undefined}
+          subtitle={radio.dj.nickname || undefined}
           cover={radio.picUrl}
           badge={radio.subCount ? formatPlayCount(radio.subCount) : undefined}
           onClick={() => onSelect?.(radio)}

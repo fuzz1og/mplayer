@@ -9,7 +9,7 @@ import {
 import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
 import { CircleAlert, ListMusic, Music2, Radio, User } from 'lucide-react-native';
-import { formatPlayCount, getDirectClient } from '@mplayer/core';
+import { formatPlayCount, getDirectClient, describeDjRadioSearchFailure } from '@mplayer/core';
 import type { DiscoverPlaylist, DjRadio, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
 import { useSourceStore } from '../../stores/sourceStore';
@@ -90,7 +90,7 @@ export default function SearchPage() {
   const playlistKeywordRef = useRef<string | null>(null);
   const [djradios, setDjradios] = useState<DjRadio[]>([]);
   const [djradiosLoading, setDjradiosLoading] = useState(false);
-  const [djradiosError, setDjradiosError] = useState(false);
+  const [djradiosError, setDjradiosError] = useState('');
   const djradioKeywordRef = useRef<string | null>(null);
 
   /** 电台搜索：cloudsearch type=1009 上游只回 top 10，无分页；懒加载。 */
@@ -100,7 +100,7 @@ export default function SearchPage() {
     djradioKeywordRef.current = kw;
     const seq = ++djradioSearchSeq;
     setDjradiosLoading(true);
-    setDjradiosError(false);
+    setDjradiosError('');
     try {
       const radios = await getDirectClient('netease')!.searchDjRadios!(kw);
       if (seq !== djradioSearchSeq) return;
@@ -109,7 +109,7 @@ export default function SearchPage() {
       if (seq !== djradioSearchSeq) return;
       console.error('[Search] djradios error:', e.message);
       setDjradios([]);
-      setDjradiosError(true);
+      setDjradiosError(describeDjRadioSearchFailure(e?.message || '电台搜索失败'));
     } finally {
       if (seq === djradioSearchSeq) setDjradiosLoading(false);
     }
@@ -208,7 +208,7 @@ export default function SearchPage() {
     djradioSearchSeq += 1;
     djradioKeywordRef.current = null;
     setDjradios([]);
-    setDjradiosError(false);
+    setDjradiosError('');
     setDjradiosLoading(false);
   }, [q]);
 
@@ -261,7 +261,7 @@ export default function SearchPage() {
         ) : djradiosError ? (
           <View style={styles.emptyContainer}>
             <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.danger }]}>电台搜索失败</Text>
+            <Text style={[styles.emptyText, { color: colors.danger }]}>{djradiosError}</Text>
             <ScalePress style={styles.retryButton} onPress={() => void searchDjradios(q, true)}>
               <Text style={styles.retryText}>重试</Text>
             </ScalePress>
@@ -293,7 +293,7 @@ export default function SearchPage() {
                 )}
                 <Text style={styles.playlistName} numberOfLines={2}>{r.name}</Text>
                 <Text style={styles.playlistMeta} numberOfLines={1}>
-                  {r.dj.nickname}{r.programCount ? ` · ${r.programCount} 期` : ''}
+                  {r.dj.nickname}
                 </Text>
               </ScalePress>
             )}

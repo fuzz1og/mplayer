@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { setTransport, setTransportRetryOptions, type TransportRequest } from '../transport.js';
 import { createNeteaseDirectClient } from '../neteaseDirect.js';
 import type { ContentCache } from '../../shared/sourceRouter.js';
@@ -6,6 +6,7 @@ import type { ContentCache } from '../../shared/sourceRouter.js';
 afterEach(() => {
   setTransport(null);
   setTransportRetryOptions(null);
+  vi.useRealTimers();
 });
 
 function fakeCache(): ContentCache {
@@ -141,6 +142,26 @@ describe('neteaseDirect DJ 电台（#742）', () => {
     expect(body.get('limit')).toBe('30');
   });
 
+  it('单期简介优先 programDesc，且不把电台 desc 当单期简介复用', async () => {
+    mockTransport([
+      {
+        match: (url) => url.includes('/api/dj/program/byradio'),
+        respond: () => json({
+          code: 200,
+          count: 2,
+          more: false,
+          programs: [
+            { ...program, programDesc: [{ content: '富文本单期简介' }], description: '纯文本单期简介' },
+            { ...program, id: 2, programDesc: null, description: '电台简介' },
+          ],
+        }),
+      },
+    ]);
+    const page = await createNeteaseDirectClient(fakeCache()).getDjRadioPrograms!('1003897323', 0, 30);
+    expect(page.programs[0].description).toBe('富文本单期简介');
+    expect(page.programs[1].description).toBe('');
+  });
+
   it('getArtistRadios：按 userId 取电台；getArtistInfo 带出 accountId', async () => {
     const seen = mockTransport([
       {
@@ -195,7 +216,77 @@ describe('neteaseDirect DJ 电台（#742）', () => {
     expect(calls).toBe(2);
   });
 
+  it('节目腿 406 按指数退避重试，恢复后返回列表且不缓存失败', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    mockTransport([
+      {
+        match: (url) => url.includes('/api/dj/program/byradio'),
+        respond: () => {
+          calls += 1;
+          return calls < 3
+            ? json({ code: 406, msg: '操作频繁' })
+            : json({ code: 200, count: 1, more: false, programs: [program] });
+        },
+      },
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    const pending = client.getDjRadioPrograms!('1003897323', 0, 30);
+    await vi.advanceTimersByTimeAsync(0);
+    expect(calls).toBe(1);
+    await vi.advanceTimersByTimeAsync(121);
+    expect(calls).toBe(2);
+    await vi.advanceTimersByTimeAsync(241);
+    expect(calls).toBe(3);
+    await vi.advanceTimersByTimeAsync(61);
+    const page = await pending;
+    expect(page.programs).toHaveLength(1);
+    expect(page.total).toBe(1);
+  });
+
+  it('节目腿 406 重试到上限后抛可读错误，不缓存失败', async () => {
+    vi.useFakeTimers();
+    let calls = 0;
+    let code = 406;
+    mockTransport([
+      {
+        match: (url) => url.includes('/api/dj/program/byradio'),
+        respond: () => {
+          calls += 1;
+          return json({ code, msg: '操作频繁' });
+        },
+      },
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    const pending = client.getDjRadioPrograms!('1003897323', 0, 30);
+    const rejected = expect(pending).rejects.toThrow(/code=406.*操作频繁，请稍后重试/);
+    await vi.advanceTimersByTimeAsync(0);
+    await vi.advanceTimersByTimeAsync(121);
+    await vi.advanceTimersByTimeAsync(241);
+    await rejected;
+    expect(calls).toBe(3);
+    code = 200;
+    const retry = client.getDjRadioPrograms!('1003897323', 0, 30);
+    await vi.advanceTimersByTimeAsync(61);
+    await expect(retry).resolves.toMatchObject({ total: 0, more: false });
+    expect(calls).toBe(4);
+  });
+
+  it('电台搜索 405/406 共用限流文案，其他 code 保留上游提示', async () => {
+    let code = 405;
+    mockTransport([
+      { match: (url) => url.includes('/api/cloudsearch/pc'), respond: () => json({ code, message: 'upstream' }) },
+    ]);
+    const client = createNeteaseDirectClient(fakeCache());
+    await expect(client.searchDjRadios!('限流405')).rejects.toThrow(/405.*操作频繁，请稍后重试/);
+    code = 406;
+    await expect(client.searchDjRadios!('限流406')).rejects.toThrow(/406.*操作频繁，请稍后重试/);
+    code = 400;
+    await expect(client.searchDjRadios!('参数400')).rejects.toThrow(/400.*upstream/);
+  });
+
   it('同键并发只打一发；空节目列表不缓存', async () => {
+    vi.useRealTimers();
     const seen: TransportRequest[] = [];
     let release!: () => void;
     const gate = new Promise<void>((resolve) => { release = resolve; });

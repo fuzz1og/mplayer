@@ -14,6 +14,7 @@ import type { UrlInfo } from '../shared/playability.js';
 import { normalizePublishTime } from '../utils/publishTime.js';
 import { stripSourceIdPrefix } from '../utils/sourceIdPrefix.js';
 import { request, bodyToText, cappedRequestTimeout, type TransportCallOptions } from './transport.js';
+import { isRateLimitedCode, upstreamCodeError, upstreamCodeHint } from './djRadioErrors.js';
 import { weapiRequest } from './neteaseWeapi.js';
 import { getUserAgent } from './antiScrape.js';
 import { cacheManager } from './memoryCacheManager.js';
@@ -41,6 +42,9 @@ const DJRADIO_BY_USER_URL = 'https://music.163.com/api/djradio/get/byuser';
 /** 网易电台搜索上游只回 top 10；limit 实测不生效，UI 不做分页。 */
 const DJRADIO_SEARCH_LIMIT = 10;
 const DJRADIO_TTL_MS = 10 * 60 * 1000;
+const DJRADIO_PROGRAM_MAX_RETRIES = 2;
+const DJRADIO_PROGRAM_RETRY_BASE_MS = 120;
+const DJRADIO_PROGRAM_SERIAL_GAP_MS = 60;
 
 // ── 缓存 TTL（对齐门面旧语义）──────────────────────────────────────
 const TOPLIST_TTL_MS = 24 * 60 * 60 * 1000;      // 榜单 1 天（原 hotlist 缓存）
@@ -226,10 +230,32 @@ function joinInflight<T>(
 
 /** 网易 djradio 的 body.code 错误：405/406 是限流，不能与空结果或 404 混用。 */
 function djRadioError(operation: string, payload: any): Error {
-  const code = Number(payload?.code) || 0;
-  const upstream = payload?.msg || payload?.message || '';
-  const hint = code === 405 || code === 406 ? '操作频繁，请稍后重试' : upstream;
-  return new Error(`${operation}失败 (code=${code}${hint ? `, ${hint}` : ''})`);
+  return upstreamCodeError(`${operation}失败`, payload?.code, payload?.msg || payload?.message);
+}
+
+interface DjRadioProgramPayload {
+  code: number;
+  count?: number;
+  more?: boolean;
+  programs?: any[];
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+/** 节目腿按上游冷却退避；分页与全量拉取天然串行，不额外并发打上游。 */
+async function fetchDjRadioProgramPayload(
+  body: Record<string, string | number | boolean | undefined>,
+): Promise<DjRadioProgramPayload> {
+  for (let attempt = 0; ; attempt += 1) {
+    const data = await plaintextPostJson<DjRadioProgramPayload>(DJRADIO_PROGRAMS_URL, body);
+    if (data?.code === 200) return data;
+    if (!isRateLimitedCode(data?.code) || attempt >= DJRADIO_PROGRAM_MAX_RETRIES) {
+      throw djRadioError(`获取电台节目 (radioId=${body.radioId})`, data);
+    }
+    await sleep(DJRADIO_PROGRAM_RETRY_BASE_MS * 2 ** attempt);
+  }
 }
 
 /** 兜底：旧明文接口（无加密）获取网易云歌单，返回 playlist 对象或 null。 */
@@ -350,10 +376,8 @@ async function cloudsearchSearch(
   }
   const data = JSON.parse(res.body) as { code: number; message?: string; result?: any };
   if (data.code !== 200) {
-    const hint = data.code === 405 || data.code === 406
-      ? '操作频繁，请稍后重试'
-      : data.message || '';
-    throw new Error(`cloudsearch code=${data.code} ${hint}`.trim());
+    const hint = upstreamCodeHint(data.code, data.message);
+    throw new Error(`cloudsearch code=${data.code}${hint ? ` ${hint}` : ''}`);
   }
   return data.result;
 }
@@ -395,8 +419,8 @@ function mapPlaylist(p: any): DiscoverPlaylist {
   };
 }
 
-/** 上游响应里唯一的数组字段（djradio 各腿的键名不稳定，按形状取）。 */
-function firstArray(value: unknown): any[] {
+/** djradio 各腿的数组键名不稳定，取响应对象里的首个数组字段。 */
+function firstArrayField(value: unknown): any[] {
   if (!value || typeof value !== 'object') return [];
   for (const item of Object.values(value as Record<string, unknown>)) {
     if (Array.isArray(item)) return item;
@@ -431,12 +455,14 @@ function normalizeDjRadio(raw: any): DjRadio {
   };
 }
 
-/** programDesc 是富文本数组；优先它的纯文本，回落 description。 */
-function programDescriptionOf(program: any): string {
+/** 单期简介优先 programDesc 文本，其次 description；等于电台简介时不复用。 */
+function programDescriptionOf(program: any, radioDesc: string): string {
   if (Array.isArray(program?.programDesc)) {
-    return program.programDesc.map((part: any) => part?.content || '').join('').trim();
+    const rich = program.programDesc.map((part: any) => part?.content || '').join('').trim();
+    if (rich && rich !== radioDesc) return rich;
   }
-  return String(program?.description || '').trim();
+  const plain = String(program?.description || '').trim();
+  return plain && plain !== radioDesc ? plain : '';
 }
 
 function mapDjRadioProgram(program: any, radio: DjRadio): DjRadioProgram {
@@ -461,7 +487,7 @@ function mapDjRadioProgram(program: any, radio: DjRadio): DjRadioProgram {
     serialNum: Number(program?.serialNum) || 0,
     createTime: Number(program?.createTime) || 0,
     listenerCount: Number(program?.listenerCount) || 0,
-    description: programDescriptionOf(program),
+    description: programDescriptionOf(program, radio.desc),
     coverUrl: cover,
   };
 }
@@ -939,15 +965,12 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       const cached = contentCache.get<DjRadioProgramsPage>(cacheKey);
       if (cached) return cached;
       return joinInflight(djRadioProgramsInflight, cacheKey, async () => {
-        const data = await plaintextPostJson<any>(DJRADIO_PROGRAMS_URL, {
+        const data = await fetchDjRadioProgramPayload({
           radioId,
           limit: size,
           offset: start,
           asc: asc ? 'true' : 'false',
         });
-        if (data?.code !== 200) {
-          throw djRadioError(`获取电台节目 (radioId=${radioId})`, data);
-        }
         const rawPrograms = Array.isArray(data.programs) ? data.programs : [];
         const radio = rawPrograms[0]?.radio
           ? normalizeDjRadio(rawPrograms[0].radio)
@@ -958,6 +981,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
           more: Boolean(data.more),
         };
         if (result.programs.length > 0) contentCache.set(cacheKey, result, DJRADIO_TTL_MS);
+        await sleep(DJRADIO_PROGRAM_SERIAL_GAP_MS);
         return result;
       });
     },
@@ -973,7 +997,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
           throw djRadioError(`获取歌手电台 (userId=${userId})`, data);
         }
         const result = {
-          radios: firstArray(data).map(normalizeDjRadio),
+          radios: firstArrayField(data).map(normalizeDjRadio),
           total: Number(data.count) || 0,
           more: Boolean(data.hasMore),
           subCount: Number(data.subCount) || 0,
@@ -993,7 +1017,7 @@ export function createNeteaseDirectClient(contentCache: ContentCache = defaultCo
       if (cached && Array.isArray(cached)) return cached;
       return joinInflight(djRadioSearchInflight, cacheKey, async () => {
         const result = await cloudsearchSearch(kw, CLOUDSEARCH_TYPE_DJRADIO, size, 0);
-        const radios = firstArray(result).map(normalizeDjRadio);
+        const radios = firstArrayField(result).map(normalizeDjRadio);
         if (radios.length > 0) contentCache.set(cacheKey, radios, SEARCH_TTL_MS);
         return radios;
       });

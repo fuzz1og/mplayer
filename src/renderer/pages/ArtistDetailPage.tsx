@@ -55,9 +55,11 @@ const ArtistDetailPage: React.FC = () => {
   const [activeTab, setActiveTab] = useState<TabKey>('hot');
   const [radios, setRadios] = useState<DjRadio[]>([]);
   const [radiosLoading, setRadiosLoading] = useState(false);
+  const [radiosError, setRadiosError] = useState<string | null>(null);
+  const [radiosReloadKey, setRadiosReloadKey] = useState(0);
   const tabOptions = useMemo(
-    () => (radios.length > 0 ? [...TABS, { key: 'djradios' as const, label: '电台' }] : TABS),
-    [radios.length],
+    () => (radios.length > 0 || radiosError ? [...TABS, { key: 'djradios' as const, label: '电台' }] : TABS),
+    [radios.length, radiosError],
   );
   const labelOf = useCallback(
     (key: TabKey) => tabOptions.find((tab) => tab.key === key)?.label ?? tabOptions[0].label,
@@ -95,26 +97,31 @@ const ArtistDetailPage: React.FC = () => {
   useEffect(() => {
     const accountId = artist?.accountId;
     setRadios([]);
+    setRadiosError(null);
     if (!accountId) {
       setRadiosLoading(false);
       return;
     }
     let cancelled = false;
     setRadiosLoading(true);
-    callMusicApi('getArtistRadios', 'netease', accountId)
-      .then((page) => {
-        if (!cancelled) setRadios(page.radios);
+    callMusicApi('getArtistRadiosRouted', 'netease', accountId)
+      .then((outcome) => {
+        if (cancelled) return;
+        if (!outcome.ok) {
+          setRadiosError(outcome.reason === 'unsupported' ? '源不支持' : '加载失败，请稍后重试');
+          return;
+        }
+        setRadios(outcome.page.radios);
       })
       .catch((error: unknown) => {
-        // 歌手页电台是可选区块：失败时隐藏，不把整页打成错误态
         console.error('加载歌手电台失败:', error);
-        if (!cancelled) setRadios([]);
+        if (!cancelled) setRadiosError('加载失败，请稍后重试');
       })
       .finally(() => {
         if (!cancelled) setRadiosLoading(false);
       });
     return () => { cancelled = true; };
-  }, [artist?.accountId]);
+  }, [artist?.accountId, radiosReloadKey]);
 
   useEffect(() => {
     const loadSongs = async () => {
@@ -333,6 +340,8 @@ const ArtistDetailPage: React.FC = () => {
             <DjRadioGrid
               radios={radios}
               loading={radiosLoading}
+              error={radiosError}
+              onRetry={() => setRadiosReloadKey((key) => key + 1)}
               onSelect={(radio) => navigate(`/djradio/${radio.id}`)}
               emptyText="这个歌手还没有电台"
             />

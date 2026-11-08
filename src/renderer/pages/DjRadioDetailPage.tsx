@@ -1,7 +1,16 @@
 import React, { useCallback, useEffect, useRef, useState } from 'react';
 import { useNavigate, useParams } from 'react-router-dom';
 import { Download, ListPlus, Play, Radio as RadioIcon } from 'lucide-react';
-import { formatPlayCount, type DjRadio, type DjRadioProgram, type Song } from '@mplayer/core';
+import {
+  describeDjRadioFailure,
+  fetchAllDjRadioPrograms,
+  formatPlayCount,
+  type DjRadio,
+  type DjRadioProgram,
+  type DjRadioDetailOutcome,
+  type DjRadioProgramsOutcome,
+  type Song,
+} from '@mplayer/core';
 import '@/renderer/styles/detail-page.css';
 import '@/renderer/styles/songlist.css';
 import { Button, InfoHint, PageHero } from '@/renderer/ui';
@@ -9,6 +18,7 @@ import SongList from '@/renderer/components/SongList';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { useDownload } from '@/renderer/hooks/useDownload';
 import { usePlayerStore } from '@/renderer/store/playerStore';
+import { useFavoriteStore } from '@/renderer/store/favoriteStore';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { createDesktopPlaylistWriter } from '@/renderer/services/playlistWriteAdapter';
 import { toast } from '@/renderer/services/toastStore';
@@ -29,6 +39,8 @@ const DjRadioDetailPage: React.FC = () => {
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
+  const favoriteIds = useFavoriteStore((s) => s.favoriteIds);
+  const toggleFavorite = useFavoriteStore((s) => s.toggleFavorite);
   const { download, downloadBatch } = useDownload();
 
   const [radio, setRadio] = useState<DjRadio | null>(null);
@@ -41,8 +53,33 @@ const DjRadioDetailPage: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [programsError, setProgramsError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [playingAll, setPlayingAll] = useState(false);
+  const [downloadingAll, setDownloadingAll] = useState(false);
+  const [detailError, setDetailError] = useState<DjRadioDetailOutcome | null>(null);
+  const [programsFailure, setProgramsFailure] = useState<DjRadioProgramsOutcome | null>(null);
+  const [reloadKey, setReloadKey] = useState(0);
   const loadingMoreRef = useRef(false);
+  const allFetchRef = useRef(false);
   const scrollRef = useRef<HTMLDivElement>(null);
+
+  const fetchProgramPage = useCallback(async (targetId: string, offset: number, limit: number) => {
+    const outcome = await callMusicApi('getDjRadioProgramsRouted', 'netease', targetId, offset, limit);
+    if (!outcome.ok) throw new Error(outcome.message);
+    return outcome.page;
+  }, []);
+
+  const fetchAllPrograms = useCallback(
+    () => fetchAllDjRadioPrograms(radioId, fetchProgramPage),
+    [fetchProgramPage, radioId],
+  );
+
+  const guardAllFetch = useCallback(() => {
+    if (allFetchRef.current) return false;
+    allFetchRef.current = true;
+    return true;
+  }, []);
+
+  const releaseAllFetch = useCallback(() => { allFetchRef.current = false; }, []);
 
   useEffect(() => {
     if (!radioId) {
@@ -54,24 +91,34 @@ const DjRadioDetailPage: React.FC = () => {
     setLoading(true);
     setError(null);
     setRadio(null);
+    setDetailError(null);
+    setProgramsFailure(null);
     setPrograms([]);
     setTotal(0);
     setHasMore(false);
     setProgramsError(null);
     setProgramsLoading(false);
-    callMusicApi('getDjRadioDetail', 'netease', radioId)
-      .then((data) => {
+    callMusicApi('getDjRadioDetailRouted', 'netease', radioId)
+      .then((outcome) => {
         if (cancelled) return;
-        if (!data) {
-          setError('电台不存在或加载失败');
+        if (!outcome.ok) {
+          setDetailError(outcome);
+          setError(describeDjRadioFailure(outcome.reason, outcome.message));
+          setProgramsLoading(false);
           return;
         }
-        setRadio(data);
+        setRadio(outcome.radio);
         setLoading(false);
         setProgramsLoading(true);
-        return callMusicApi('getDjRadioPrograms', 'netease', radioId, 0, PAGE_SIZE)
-          .then((page) => {
+        return callMusicApi('getDjRadioProgramsRouted', 'netease', radioId, 0, PAGE_SIZE)
+          .then((outcome) => {
             if (cancelled) return;
+            if (!outcome.ok) {
+              setProgramsFailure(outcome);
+              setProgramsError(describeDjRadioFailure(outcome.reason, outcome.message));
+              return;
+            }
+            const page = outcome.page;
             setPrograms(page.programs);
             setTotal(page.total);
             setHasMore(page.more);
@@ -79,7 +126,8 @@ const DjRadioDetailPage: React.FC = () => {
           .catch((e: unknown) => {
             if (cancelled) return;
             console.error('加载电台节目失败:', e);
-            setProgramsError(e instanceof Error ? e.message : '节目加载失败');
+            setProgramsFailure({ ok: false, reason: 'failed', message: e instanceof Error ? e.message : '' });
+            setProgramsError('加载失败');
           })
           .finally(() => {
             if (!cancelled) setProgramsLoading(false);
@@ -92,19 +140,26 @@ const DjRadioDetailPage: React.FC = () => {
         if (!cancelled) setLoading(false);
       });
     return () => { cancelled = true; };
-  }, [radioId]);
+  }, [radioId, reloadKey]);
 
   const loadMorePrograms = useCallback(async () => {
     if (!radioId || loadingMoreRef.current || !hasMore) return;
     loadingMoreRef.current = true;
     setLoadingMore(true);
     try {
-      const page = await callMusicApi('getDjRadioPrograms', 'netease', radioId, programs.length, PAGE_SIZE);
+      const outcome = await callMusicApi('getDjRadioProgramsRouted', 'netease', radioId, programs.length, PAGE_SIZE);
+      if (!outcome.ok) {
+        setProgramsFailure(outcome);
+        setProgramsError(describeDjRadioFailure(outcome.reason, outcome.message));
+        return;
+      }
+      const page = outcome.page;
       setPrograms((prev) => [...prev, ...page.programs]);
       setTotal(page.total);
       setHasMore(page.more);
     } catch (e: unknown) {
       console.error('加载更多电台节目失败:', e);
+      setProgramsError('加载失败');
     } finally {
       setLoadingMore(false);
       loadingMoreRef.current = false;
@@ -122,30 +177,54 @@ const DjRadioDetailPage: React.FC = () => {
     void play(program);
   }, [play, setCurrentPlaylist]);
 
-  const handlePlayAll = useCallback(() => {
-    if (programs.length === 0) return;
-    setCurrentPlaylist(programs, 0);
-    void play(programs[0]);
-  }, [play, programs, setCurrentPlaylist]);
+  const handleToggleFavorite = useCallback((program: Song) => {
+    void toggleFavorite(program);
+  }, [toggleFavorite]);
 
-  const handleDownloadAll = useCallback(() => {
-    if (programs.length > 0) void downloadBatch(programs);
-  }, [downloadBatch, programs]);
+  const handlePlayAll = useCallback(async () => {
+    if (playingAll || !guardAllFetch()) return;
+    setPlayingAll(true);
+    try {
+      const all = await fetchAllPrograms();
+      if (all.length === 0) {
+        toast.error('这个电台还没有节目');
+        return;
+      }
+      setCurrentPlaylist(all, 0);
+      void play(all[0]);
+    } catch (e: unknown) {
+      console.error('播放电台全部节目失败:', e);
+      toast.error('播放全部失败，请稍后重试');
+    } finally {
+      setPlayingAll(false);
+      releaseAllFetch();
+    }
+  }, [fetchAllPrograms, guardAllFetch, play, playingAll, releaseAllFetch, setCurrentPlaylist]);
+
+  const handleDownloadAll = useCallback(async () => {
+    if (downloadingAll || !guardAllFetch()) return;
+    setDownloadingAll(true);
+    try {
+      const all = await fetchAllPrograms();
+      if (all.length === 0) {
+        toast.error('这个电台还没有节目');
+        return;
+      }
+      await downloadBatch(all);
+    } catch (e: unknown) {
+      console.error('下载电台全部节目失败:', e);
+      toast.error('下载全部失败，请稍后重试');
+    } finally {
+      setDownloadingAll(false);
+      releaseAllFetch();
+    }
+  }, [downloadBatch, downloadingAll, fetchAllPrograms, guardAllFetch, releaseAllFetch]);
 
   const handleSaveAll = useCallback(async () => {
-    if (!radio || saving) return;
+    if (!radio || saving || !guardAllFetch()) return;
     setSaving(true);
     try {
-      const all: DjRadioProgram[] = [];
-      let offset = 0;
-      let more = true;
-      while (more) {
-        const page = await callMusicApi('getDjRadioPrograms', 'netease', radioId, offset, 200);
-        all.push(...page.programs);
-        more = page.more;
-        offset += page.programs.length;
-        if (page.programs.length === 0) break;
-      }
+      const all = await fetchAllPrograms();
       if (all.length === 0) {
         toast.error('这个电台还没有节目');
         return;
@@ -163,8 +242,9 @@ const DjRadioDetailPage: React.FC = () => {
       toast.error('保存失败，请稍后重试');
     } finally {
       setSaving(false);
+      releaseAllFetch();
     }
-  }, [navigate, radio, radioId, saving]);
+  }, [fetchAllPrograms, guardAllFetch, navigate, radio, releaseAllFetch, saving]);
 
   const meta = radio
     ? [
@@ -181,7 +261,16 @@ const DjRadioDetailPage: React.FC = () => {
   }
 
   if (!radio) {
-    return <div className="detail-page"><div className="detail-page__error">{error || '电台不存在或加载失败'}</div></div>;
+    return (
+      <div className="detail-page">
+        <div className="detail-page__error">
+          <div>{error || '电台加载失败'}</div>
+          {detailError?.ok === false && detailError.reason !== 'not-found' && (
+            <button className="detail-page__error-retry" onClick={() => setReloadKey((key) => key + 1)}>重试</button>
+          )}
+        </div>
+      </div>
+    );
   }
 
   return (
@@ -218,23 +307,23 @@ const DjRadioDetailPage: React.FC = () => {
                 size="sm"
                 icon={<Play size={15} aria-hidden="true" />}
                 onClick={handlePlayAll}
-                disabled={programs.length === 0 || programsLoading}
+                disabled={programs.length === 0 || programsLoading || playingAll || downloadingAll || saving}
               >
-                播放全部
+                {playingAll ? '准备中...' : '播放全部'}
               </Button>
               <Button
                 size="sm"
                 icon={<Download size={15} aria-hidden="true" />}
-                onClick={handleDownloadAll}
-                disabled={programs.length === 0 || programsLoading}
+                onClick={() => { void handleDownloadAll(); }}
+                disabled={programs.length === 0 || programsLoading || playingAll || downloadingAll || saving}
               >
-                下载全部
+                {downloadingAll ? '准备中...' : '下载全部'}
               </Button>
               <Button
                 size="sm"
                 icon={<ListPlus size={15} aria-hidden="true" />}
                 onClick={() => { void handleSaveAll(); }}
-                disabled={saving || total === 0}
+                disabled={saving || total === 0 || playingAll || downloadingAll}
               >
                 {saving ? '保存中...' : '保存全部到新歌单'}
               </Button>
@@ -244,19 +333,35 @@ const DjRadioDetailPage: React.FC = () => {
 
         <div className="detail-page__list">
           {programsError && programs.length === 0 ? (
-            <div className="detail-page__error">{programsError}</div>
+            <div className="detail-page__error">
+              <div>{programsError}</div>
+              {programsFailure?.ok === false && programsFailure.reason !== 'unsupported' && (
+                <button className="detail-page__error-retry" onClick={() => setReloadKey((key) => key + 1)}>重试</button>
+              )}
+            </div>
           ) : (
             <>
+              {programsError && programs.length > 0 && (
+                <div className="detail-page__error detail-page__list-error">
+                  <div>{programsError}</div>
+                  <button className="detail-page__error-retry" onClick={() => void loadMorePrograms()}>重试</button>
+                </div>
+              )}
               <SongList
                 songs={programs}
                 currentSongId={currentSong?.id}
                 isPlaying={isPlaying}
+                favoriteIds={favoriteIds}
                 onPlay={handlePlay}
+                onToggleFavorite={handleToggleFavorite}
                 onDownload={download}
                 density="library"
                 showDuration
                 showAlbum={false}
                 indexLabel={(song) => (song as DjRadioProgram).serialNum || undefined}
+                rowKey={(song, index) => (song as DjRadioProgram).programId || `program-${index}`}
+                hideSwap
+                rowTitle={(song) => (song as DjRadioProgram).description || undefined}
                 loading={programsLoading && programs.length === 0}
                 emptyText="这个电台还没有节目"
               />

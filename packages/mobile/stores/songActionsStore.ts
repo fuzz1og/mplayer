@@ -16,6 +16,8 @@ export interface SongActionHandlers {
   onSwap?: (original: Song, swapped: Song) => void;
   /** 提供后「更多」菜单显示「移除」项（歌单 / 播放历史列表用） */
   onRemove?: (song: Song) => void;
+  /** 内容面不是目录歌曲时收掉跨源换源动作。 */
+  hideSwap?: boolean;
 }
 
 /** 「更多」操作面板：visible=false 后仍保留 song/handlers，

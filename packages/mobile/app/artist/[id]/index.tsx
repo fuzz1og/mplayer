@@ -59,6 +59,8 @@ export default function ArtistDetailPage() {
   const [albumsError, setAlbumsError] = useState(false);
   const [albumReloadKey, setAlbumReloadKey] = useState(0);
   const [radios, setRadios] = useState<DjRadio[]>([]);
+  const [radiosError, setRadiosError] = useState('');
+  const [radiosReloadKey, setRadiosReloadKey] = useState(0);
 
   // 入口带来的名字/头像先出（零请求），按 id 校正后再覆盖
   const displayName = artist?.name || name || '歌手';
@@ -125,26 +127,32 @@ export default function ArtistDetailPage() {
     return () => { cancelled = true; };
   }, [id, albumReloadKey]);
 
-  // 歌手电台（#742）：accountId 只对入驻艺人存在；失败/空结果整块隐藏。
+  // 歌手电台（#742）：accountId 只对入驻艺人存在。
   useEffect(() => {
     const accountId = artist?.accountId;
     setRadios([]);
+    setRadiosError('');
     if (!accountId) {
       return;
     }
     let cancelled = false;
     getArtistRadiosRouted('netease', accountId)
       .then((outcome) => {
-        if (!cancelled) setRadios(outcome.ok ? outcome.page.radios : []);
+        if (cancelled) return;
+        if (!outcome.ok) {
+          setRadiosError(outcome.reason === 'unsupported' ? '源不支持' : '加载失败，请稍后重试');
+          return;
+        }
+        setRadios(outcome.page.radios);
       })
       .catch((e) => {
         if (!cancelled) {
           console.error('[ArtistDetail] radios error:', e);
-          setRadios([]);
+          setRadiosError('加载失败，请稍后重试');
         }
       });
     return () => { cancelled = true; };
-  }, [artist?.accountId]);
+  }, [artist?.accountId, radiosReloadKey]);
 
   // 「查看全部专辑」（#417 P0.1）：时间线页按年份分区 + 纵向滚动看全部，横滑条放不下 243 张
   const openAllAlbums = useCallback(() => {
@@ -205,7 +213,7 @@ export default function ArtistDetailPage() {
         )}
         <Text style={styles.albumName} numberOfLines={1}>{r.name}</Text>
         <Text style={styles.radioMeta} numberOfLines={1}>
-          {r.dj.nickname}{r.programCount ? ` · ${r.programCount} 期` : ''}
+          {r.dj.nickname}
         </Text>
       </ScalePress>
     ),
@@ -256,6 +264,13 @@ export default function ArtistDetailPage() {
             maxToRenderPerBatch={4}
             windowSize={3}
           />
+        </View>
+      ) : radiosError ? (
+        <View style={styles.radiosSection}>
+          <Text style={styles.albumsTitle}>电台</Text>
+          <ScalePress style={styles.albumsRetry} onPress={() => setRadiosReloadKey((key) => key + 1)}>
+            <Text style={styles.albumsRetryText}>{radiosError}</Text>
+          </ScalePress>
         </View>
       ) : null}
     </View>

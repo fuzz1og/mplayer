@@ -27,8 +27,12 @@ interface SongRowProps {
   rank?: number;
   onPress?: (song: Song) => void;
   showSource?: boolean;
-  /** 电台节目等非歌曲内容：隐藏行内收藏/更多动作，避免换源/收藏污染语义。 */
+  /** 隐藏行内动作的通用能力；电台节目不传，见 ADR 2026-11-07。 */
   hideActions?: boolean;
+  /** 内容面不是目录歌曲时收掉跨源换源动作。 */
+  hideSwap?: boolean;
+  /** 单期简介等补充信息；作为 accessibilityLabel 暴露给读屏。 */
+  description?: string;
   queueSongs?: Song[];
   /** 换源成功回调：父组件用它更新自己的列表 state（歌单页同时持久化） */
   onSwap?: (original: Song, swapped: Song) => void;
@@ -60,6 +64,8 @@ function SongRow({
   onPress,
   showSource = false,
   hideActions = false,
+  hideSwap = false,
+  description,
   queueSongs,
   onSwap,
   onRemove,
@@ -108,7 +114,7 @@ function SongRow({
   const handleMore = (e?: GestureResponderEvent) => {
     e?.stopPropagation();
     pressMutex.claimInner();
-    openActions(song, { onSwap, onRemove });
+    openActions(song, { onSwap, onRemove, hideSwap });
   };
 
   const handlePress = () => {
@@ -143,6 +149,7 @@ function SongRow({
       pressScaleTo={0.98}
       onPress={handlePress}
       onLongPress={onLongPress}
+      accessibilityLabel={description ? `${song.name}，${description}` : song.name}
     >
       {/* 选择模式：#490 勾选圈占榜位同槽位；未选中是空心圈，选中填 accent */}
       {selectionMode && (

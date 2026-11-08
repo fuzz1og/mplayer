@@ -17,6 +17,9 @@ describe('core musicApi 收编方法（ADR-0001）', () => {
       'prefetchPlayableSong',
       'forgetPrefetchedSong',
       'explainPlaybackFailure',
+      'getDjRadioDetailRouted',
+      'getDjRadioProgramsRouted',
+      'getArtistRadiosRouted',
     ] as const;
     for (const m of methods) {
       expect(typeof (musicApi as Record<string, unknown>)[m]).toBe('function');

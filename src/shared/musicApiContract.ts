@@ -23,6 +23,9 @@ export const BASE_METHODS = [
   'resolvePlayableUrlRouted',
   'resolvePlayableSongRouted',
   'explainPlaybackFailure',
+  'getDjRadioDetailRouted',
+  'getDjRadioProgramsRouted',
+  'getArtistRadiosRouted',
 ] as const;
 
 export type BaseMethod = (typeof BASE_METHODS)[number];

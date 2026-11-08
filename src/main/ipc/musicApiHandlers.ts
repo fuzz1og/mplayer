@@ -39,6 +39,17 @@ export function registerMusicApiCall(api: MusicApi): void {
     resolvePlayableUrlRouted: (song: Song) => api.resolvePlayableUrlRouted(song),
     resolvePlayableSongRouted: (song: Song) => api.resolvePlayableSongRouted(song),
     explainPlaybackFailure: (song: Song) => api.explainPlaybackFailure(song),
+    getDjRadioDetailRouted: (source: SourceKey, radioId: string) =>
+      api.getDjRadioDetailRouted(source, radioId),
+    getDjRadioProgramsRouted: (
+      source: SourceKey,
+      radioId: string,
+      offset: number,
+      limit: number,
+      asc?: boolean,
+    ) => api.getDjRadioProgramsRouted(source, radioId, offset, limit, asc),
+    getArtistRadiosRouted: (source: SourceKey, userId: string) =>
+      api.getArtistRadiosRouted(source, userId),
     // ── main 独有组合方法 ─────────────────────────────────────────
     getSodaPlayableUrl: (trackId: string) => api.getSodaPlayableUrl(trackId),
     resolvePlaylistLink: (url: string) => api.resolvePlaylistLink(url),

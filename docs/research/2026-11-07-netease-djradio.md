@@ -234,7 +234,7 @@ export interface DjRadioDetail {
 3. **链接打开/导入**：用户给的就是 `music.163.com/#/djradio?id=...`；可扩展 `parsePlaylistUrl` 的兄弟函数 `parseDjRadioUrl`，但不要把它归到「导入歌单」，否则语义会坏。
 4. **发现页热门/精选电台**：`/api/djradio/recommend/v1`、`/api/djradio/hot/v1` 已实测匿名可用；作为独立发现面后置，避免首版铺太大。
 
-**范围边界（已定）**：首版 = 电台详情页 + 搜索电台入口（top 10）+ 歌手页电台（仅 `accountId` 入驻艺人）+ 直接路由 `/djradio/:id` + 保存全部到新歌单；不做收藏、不做网易订阅、不做用户主页、不做发现页完整电台频道。
+**范围边界（用户后续修订）**：首版 = 电台详情页 + 搜索电台入口（top 10）+ 歌手页电台（仅 `accountId` 入驻艺人）+ 直接路由 `/djradio/:id` + 保存全部到新歌单；节目行复用歌曲收藏，不做网易订阅、不做用户主页、不做发现页完整电台频道。
 
 **双端影响**：
 - core：新增类型/方法/缓存；播放器、原生播放、tier3 都不改。
@@ -266,7 +266,7 @@ export interface DjRadioDetail {
 | 桌面入口 | 搜索「电台」tab + 歌手页「电台」tab | 搜索「邪热搜索」→ 歌手页 → AI 陶喆；搜索「AI 陶喆」电台能进详情 | core |
 | 移动页 | `app/djradio/[id].tsx`、CollapsingHero、播放全部/下载 | 真机进入样本电台，播放并切后台/锁屏；队列正确 | core |
 | 移动入口 | 搜索「电台」tab + 歌手页电台横滑区 | 真机走歌手名链路进入样本电台 | core |
-| ADR | 跨端契约：`Song` 映射、`accountId`、计数/排序/失败语义、无收藏订阅 | ADR 接受并进 `docs/adr/README.md`；GLOSSARY 更新 | 母票 |
+| ADR | 跨端契约：`Song` 映射、`accountId`、计数/排序/失败语义、复用歌曲收藏 | ADR 接受并进 `docs/adr/README.md`；GLOSSARY 更新 | 母票 |
 
 ## 8. 参考来源
 
