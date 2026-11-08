@@ -62,7 +62,9 @@ export default function SongActionsHost() {
       },
       { key: 'playlist', icon: ListMusic, label: '加入歌单', onPress: () => openAddToPlaylist(song) },
       { key: 'download', icon: Download, label: '下载', onPress: () => { closeActions(); nativeSongActionEffects.download(song); } },
-      { key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => openSwap(song, actionSheet?.handlers) },
+      ...(actionSheet?.handlers.hideSwap
+        ? []
+        : [{ key: 'swap', icon: ArrowLeftRight, label: '换源完整版', onPress: () => openSwap(song, actionSheet?.handlers) }]),
       { key: 'artist', icon: User, label: '搜索歌手', onPress: () => { closeActions(); nativeSongActionEffects.searchArtist(song); } },
     ];
     if (onRemove) {

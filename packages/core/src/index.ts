@@ -231,6 +231,9 @@ export {
   pickToplistSongs,
   getToplistSongs,
   getAlbumDetailRouted,
+  getDjRadioDetailRouted,
+  getDjRadioProgramsRouted,
+  getArtistRadiosRouted,
   getToplistDetailRouted,
   getArtistInfoRouted,
 } from './shared/sourceRouter.js';
@@ -254,6 +257,9 @@ export type {
   ContentCache,
   ContentMethod,
   AlbumDetailOutcome,
+  DjRadioDetailOutcome,
+  DjRadioProgramsOutcome,
+  DjRadioListOutcome,
   ToplistDetail,
   ToplistDetailOutcome,
   Tier3Resolver,
@@ -273,6 +279,16 @@ export { takeNextQueued, retryBackoffMs, DEFAULT_MAX_CONCURRENT, DEFAULT_MAX_RET
 export { kugouDirectClient, ensureKugouCookie, resolveKugouLyricUrl } from './api/kugouDirect.js';
 export { classifyLength, isTrialUrlInfo } from './api/audioProbe.js';
 export type { LengthClass, UrlInfo } from './api/audioProbe.js';
+export {
+  isRateLimitedCode,
+  isRateLimitedMessage,
+  upstreamCodeHint,
+  upstreamCodeError,
+  describeDjRadioFailure,
+  describeDjRadioSearchFailure,
+} from './api/djRadioErrors.js';
+export { fetchAllDjRadioPrograms } from './api/djRadioPrograms.js';
+export type { DjRadioPageFetcher } from './api/djRadioPrograms.js';
 export type { RoutedPlayable } from './shared/sourceRouter.js';
 // 播放护栏（#361）：决策纯函数 + 音频时长取证（L2）。
 export { evaluatePlaybackGuard, GUARD_TOLERANCE_SEC } from './shared/playbackGuard.js';

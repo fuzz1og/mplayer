@@ -1,5 +1,6 @@
 import { useRef } from 'react';
 import { Pressable, Animated, StyleSheet, type StyleProp, type ViewStyle, type GestureResponderEvent } from 'react-native';
+import type { ViewProps } from 'react-native';
 import { springs } from '../theme/motion';
 import { opacity } from '../theme/tokens';
 import { useReducedMotion } from '../hooks/useReducedMotion';
@@ -23,6 +24,7 @@ interface ScalePressProps {
   /** 按压幅度，默认 0.97；整行/大面板用 pressScale.row */
   pressScaleTo?: number;
   hitSlop?: { top?: number; bottom?: number; left?: number; right?: number };
+  accessibilityLabel?: ViewProps['accessibilityLabel'];
   children: React.ReactNode;
 }
 
@@ -40,6 +42,7 @@ export default function ScalePress({
   style,
   pressScaleTo = 0.97,
   hitSlop,
+  accessibilityLabel,
   children,
 }: ScalePressProps) {
   const scale = useRef(new Animated.Value(1)).current;
@@ -69,6 +72,7 @@ export default function ScalePress({
       onPressOut={pressOut}
       disabled={disabled}
       hitSlop={hitSlop}
+      accessibilityLabel={accessibilityLabel}
       style={[style, reducedMotion && styles.reducedDim, { transform: [{ scale }] }]}
     >
       {children}

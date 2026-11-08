@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { Song, SourceKey, SongGroup } from '../types/index.js';
+import type { Song, SongGroup, SourceKey } from '../types/index.js';
 import { cacheManager } from './memoryCacheManager.js';
 import { BROWSER_UA, refererForUrl } from '../utils/sourceReferer.js';
 import { decodeBase64Utf8 } from '../utils/base64.js';
@@ -13,6 +13,9 @@ import {
   searchSongsRouted as routedSearchSongs,
   resolvePlayableUrlRouted as routedResolveUrl,
   resolvePlayableSongRouted as routedResolveSong,
+  getDjRadioDetailRouted as routedDjRadioDetail,
+  getDjRadioProgramsRouted as routedDjRadioPrograms,
+  getArtistRadiosRouted as routedArtistRadios,
 } from '../shared/sourceRouter.js';
 import { explainPlaybackFailure as explainFailure } from '../tier3/tier3Api.js';
 import { decodeKuwoLyricBody } from './kuwoDirect.js';
@@ -552,4 +555,18 @@ export const musicApi = {
 
   /** 播放失败归因（#357）：直连 + tier3 都没拿到 URL 后，取可操作的原因与共享文案。 */
   explainPlaybackFailure: (song: Song) => explainFailure(song),
+
+  /** DJ 电台内容三态门面（#742）；桌面经 IPC 取同一份语义，避免把 404/406/网络失败压成一屏。 */
+  getDjRadioDetailRouted: (source: SourceKey, radioId: string) =>
+    routedDjRadioDetail(source, radioId),
+
+  getDjRadioProgramsRouted: (
+    source: SourceKey,
+    radioId: string,
+    offset: number,
+    limit: number,
+    asc?: boolean,
+  ) => routedDjRadioPrograms(source, radioId, offset, limit, asc),
+
+  getArtistRadiosRouted: (source: SourceKey, userId: string) => routedArtistRadios(source, userId),
 };

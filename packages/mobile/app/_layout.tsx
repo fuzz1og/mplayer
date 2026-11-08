@@ -151,6 +151,7 @@ export default function RootLayout() {
           <Stack.Screen name="history" />
           <Stack.Screen name="discover-playlist/[id]" />
           <Stack.Screen name="artist/[id]" />
+          <Stack.Screen name="djradio/[id]" />
         </Stack>
 
         {showPlayer && (

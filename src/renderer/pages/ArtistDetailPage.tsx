@@ -6,6 +6,7 @@ import SongList from '@/renderer/components/SongList';
 import DetailToolbar from '@/renderer/components/DetailToolbar';
 import BatchAddToPlaylistModal from '@/renderer/components/BatchAddToPlaylistModal';
 import AlbumGrid from '@/renderer/components/AlbumGrid';
+import DjRadioGrid from '@/renderer/components/DjRadioGrid';
 import '@/renderer/styles/songlist.css';
 import '@/renderer/styles/detail-page.css';
 import { Button, PageHero, Segmented } from '@/renderer/ui';
@@ -18,11 +19,11 @@ import { getCachedArtistMeta } from '@/renderer/services/artistMetaCache';
 import { useInfiniteScroll } from '@/renderer/hooks/useInfiniteScroll';
 import { callMusicApi } from '@/renderer/services/callMusicApi';
 import { resolvePlayableVersionForDesktop } from '@/renderer/services/playableVersionAdapter';
-import type { Song, Album } from '@mplayer/core';
+import type { Song, Album, Artist, DjRadio } from '@mplayer/core';
 
 const ALBUM_PAGE_SIZE = 30;
 
-type TabKey = 'hot' | 'time' | 'albums';
+type TabKey = 'hot' | 'time' | 'albums' | 'djradios';
 
 /** 三段是同一页面的次级视图（#694）：hero 内用 Segmented 切，不做压在列表上的第二道横条。 */
 const TABS: { key: TabKey; label: string }[] = [
@@ -30,9 +31,6 @@ const TABS: { key: TabKey; label: string }[] = [
   { key: 'time', label: '最新歌曲' },
   { key: 'albums', label: '专辑' },
 ];
-const TAB_LABELS = TABS.map((tab) => tab.label);
-const labelOf = (key: TabKey) => TABS.find((tab) => tab.key === key)?.label ?? TABS[0].label;
-const keyOf = (label: string) => TABS.find((tab) => tab.label === label)?.key ?? 'hot';
 
 const ArtistDetailPage: React.FC = () => {
   const { id } = useParams<{ id: string }>();
@@ -43,8 +41,9 @@ const ArtistDetailPage: React.FC = () => {
   const cachedMeta = getCachedArtistMeta(artistId);
   const stateName = (location.state as any)?.name as string | undefined;
   const statePic = (location.state as any)?.pic as string | undefined;
-  const displayName = stateName || cachedMeta?.name;
-  const displayPic = statePic || cachedMeta?.pic || '';
+  const [artist, setArtist] = useState<Artist | null>(null);
+  const displayName = artist?.name || stateName || cachedMeta?.name;
+  const displayPic = artist?.picUrl || statePic || cachedMeta?.pic || '';
 
   const [songs, setSongs] = useState<Song[]>([]);
   const [loading, setLoading] = useState(true);
@@ -54,6 +53,22 @@ const ArtistDetailPage: React.FC = () => {
   const [total, setTotal] = useState(0);
   const [order, setOrder] = useState<'hot' | 'time'>('hot');
   const [activeTab, setActiveTab] = useState<TabKey>('hot');
+  const [radios, setRadios] = useState<DjRadio[]>([]);
+  const [radiosLoading, setRadiosLoading] = useState(false);
+  const [radiosError, setRadiosError] = useState<string | null>(null);
+  const [radiosReloadKey, setRadiosReloadKey] = useState(0);
+  const tabOptions = useMemo(
+    () => (radios.length > 0 || radiosError ? [...TABS, { key: 'djradios' as const, label: '电台' }] : TABS),
+    [radios.length, radiosError],
+  );
+  const labelOf = useCallback(
+    (key: TabKey) => tabOptions.find((tab) => tab.key === key)?.label ?? tabOptions[0].label,
+    [tabOptions],
+  );
+  const keyOf = useCallback(
+    (label: string) => tabOptions.find((tab) => tab.label === label)?.key ?? 'hot',
+    [tabOptions],
+  );
 
   const play = usePlayerStore((s) => s.play);
   const setCurrentPlaylist = usePlayerStore((s) => s.setCurrentPlaylist);
@@ -64,6 +79,49 @@ const ArtistDetailPage: React.FC = () => {
   const { download, downloadBatch } = useDownload();
   const selection = useDetailSelection(songs, artistId);
   const { visibleSongs, batchMode, selectedIds, setSelectedIds, selectedSongs, visibleSelectedCount } = selection;
+
+  useEffect(() => {
+    if (!artistId) return;
+    let cancelled = false;
+    setArtist(null);
+    callMusicApi('getArtistInfo', 'netease', artistId)
+      .then((info) => {
+        if (!cancelled && info) setArtist(info);
+      })
+      .catch((error: unknown) => {
+        console.error('加载歌手信息失败:', error);
+      });
+    return () => { cancelled = true; };
+  }, [artistId]);
+
+  useEffect(() => {
+    const accountId = artist?.accountId;
+    setRadios([]);
+    setRadiosError(null);
+    if (!accountId) {
+      setRadiosLoading(false);
+      return;
+    }
+    let cancelled = false;
+    setRadiosLoading(true);
+    callMusicApi('getArtistRadiosRouted', 'netease', accountId)
+      .then((outcome) => {
+        if (cancelled) return;
+        if (!outcome.ok) {
+          setRadiosError(outcome.reason === 'unsupported' ? '源不支持' : '加载失败，请稍后重试');
+          return;
+        }
+        setRadios(outcome.page.radios);
+      })
+      .catch((error: unknown) => {
+        console.error('加载歌手电台失败:', error);
+        if (!cancelled) setRadiosError('加载失败，请稍后重试');
+      })
+      .finally(() => {
+        if (!cancelled) setRadiosLoading(false);
+      });
+    return () => { cancelled = true; };
+  }, [artist?.accountId, radiosReloadKey]);
 
   useEffect(() => {
     const loadSongs = async () => {
@@ -187,8 +245,8 @@ const ArtistDetailPage: React.FC = () => {
   const handleTabChange = useCallback((label: string) => {
     const key = keyOf(label);
     setActiveTab(key);
-    if (key !== 'albums') setOrder(key);
-  }, []);
+    if (key === 'hot' || key === 'time') setOrder(key);
+  }, [keyOf]);
 
   const batchActions = useMemo(() => [
     { key: 'download', label: '批量下载', icon: <Download size={12} />, onClick: handleBatchDownload },
@@ -196,8 +254,11 @@ const ArtistDetailPage: React.FC = () => {
   ], [handleBatchDownload, handleBatchAddToPlaylist]);
 
   const onAlbumsTab = activeTab === 'albums';
+  const onRadiosTab = activeTab === 'djradios';
   const meta = onAlbumsTab
     ? (albumsTotal !== null ? `共 ${albumsTotal} 张专辑` : `已加载 ${albums.length} 张专辑`)
+    : onRadiosTab
+      ? `共 ${radios.length} 个电台`
     : `共 ${total || '--'} 首歌曲`;
 
   return (
@@ -227,7 +288,7 @@ const ArtistDetailPage: React.FC = () => {
                 size="sm"
                 icon={<Play size={15} aria-hidden="true" />}
                 onClick={() => { void handlePlayAll(); }}
-                disabled={songs.length === 0 || loading || onAlbumsTab}
+                disabled={songs.length === 0 || loading || onAlbumsTab || onRadiosTab}
               >
                 播放全部
               </Button>
@@ -235,7 +296,7 @@ const ArtistDetailPage: React.FC = () => {
                 size="sm"
                 icon={<Download size={15} aria-hidden="true" />}
                 onClick={handleDownloadAll}
-                disabled={songs.length === 0 || loading || onAlbumsTab}
+                disabled={songs.length === 0 || loading || onAlbumsTab || onRadiosTab}
               >
                 下载全部
               </Button>
@@ -243,13 +304,13 @@ const ArtistDetailPage: React.FC = () => {
                 size="sm"
                 icon={<Search size={15} aria-hidden="true" />}
                 onClick={() => { void handleSwapMore(); }}
-                disabled={!displayName}
+                disabled={!displayName || onRadiosTab}
               >
                 换源获取更多歌曲
               </Button>
               <Segmented
                 className="detail-page__hero-segmented"
-                options={TAB_LABELS}
+                options={tabOptions.map((tab) => tab.label)}
                 value={labelOf(activeTab)}
                 onChange={handleTabChange}
                 ariaLabel="歌手内容视图"
@@ -275,6 +336,15 @@ const ArtistDetailPage: React.FC = () => {
                 <div className="detail-page__note">已加载全部 {albums.length} 张专辑</div>
               )}
             </>
+          ) : onRadiosTab ? (
+            <DjRadioGrid
+              radios={radios}
+              loading={radiosLoading}
+              error={radiosError}
+              onRetry={() => setRadiosReloadKey((key) => key + 1)}
+              onSelect={(radio) => navigate(`/djradio/${radio.id}`)}
+              emptyText="这个歌手还没有电台"
+            />
           ) : (
             <>
               {songsError && songs.length === 0 && <div className="detail-page__error">{songsError}</div>}

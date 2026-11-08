@@ -73,8 +73,14 @@ interface SongRowProps {
    * 传元素会让每帧新建的 ReactNode 击穿行的 memo，与 renderActions 同理。
    */
   renderActionsLead?: (song: Song, index: number) => React.ReactNode;
+  /** 自定义序号文案（电台节目期号等）；缺省显示 index + 1。 */
+  indexLabel?: React.ReactNode;
   /** 行尾只保留单个 28px「更多」按钮，下载 / 收藏收进菜单 */
   compactActions?: boolean;
+  /** 内容面不是目录歌曲时收掉跨源换源动作。 */
+  hideSwap?: boolean;
+  /** 单期简介等行级补充信息；作为 title 属性暴露给鼠标与读屏。 */
+  title?: string;
   style?: React.CSSProperties;
 }
 
@@ -94,7 +100,7 @@ const SongRow: React.FC<SongRowProps> = ({
   onToggleDropdown, onCloseDropdown, onCoverError, onSwap, showAlbum = true, albumWidth = COL_ALBUM,
   fillTitle = false, dragHandle, actions, rowRef, compact = false,
   variant = 'standard', showDuration = false, compactActions = false, style,
-  indexWidth, renderActionsLead,
+  indexWidth, renderActionsLead, indexLabel, hideSwap = false, title,
 }) => {
   const dropdownTriggerRef = useRef<HTMLButtonElement>(null);
   const navigate = useNavigate();
@@ -124,7 +130,7 @@ const SongRow: React.FC<SongRowProps> = ({
   if (onAddToPlaylist) {
     menuItems.push({ key: 'playlist', label: '加入歌单', icon: <CirclePlus size={14} />, onClick: () => onAddToPlaylist(song) });
   }
-  if (song.sourceType !== 'local') {
+  if (!hideSwap && song.sourceType !== 'local') {
     menuItems.push({ key: 'swap', label: '换源完整版', ariaLabel: '换源完整版', icon: <RefreshCw size={14} />, onClick: swap.open });
   }
   if (song.artist) {
@@ -156,6 +162,7 @@ const SongRow: React.FC<SongRowProps> = ({
       data-compact={compact || undefined}
       data-current={isCurrentSong || undefined}
       onDoubleClick={() => onPlay(song, queue, index)}
+      title={title}
       style={{ '--song-row-height': `${songRowHeight(variant)}px`,
         '--song-row-cover': `${songRowCoverSize(variant)}px`, ...style } as React.CSSProperties}
     >
@@ -179,7 +186,7 @@ const SongRow: React.FC<SongRowProps> = ({
             </div>
           ) : (
             <span className="song-row__number" data-current={isCurrentSong || undefined}>
-              {index + 1}
+              {indexLabel ?? index + 1}
             </span>
           ))}
         </div>

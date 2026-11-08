@@ -98,6 +98,11 @@ export interface Artist {
   musicSize: number;
   /** 源归属（#407：由宽松的 `string` 收紧为 SourceKey，省掉每个消费方各自断言）。 */
   sourceType: SourceKey;
+  /**
+   * 网易云用户 id（#742）：入驻歌手才有值；歌手页用它取「该歌手发布的电台」。
+   * 与 Artist.id（artist 实体 id）不是同一个 id。
+   */
+  accountId?: string;
 }
 
 export interface LocalSong {
@@ -166,6 +171,62 @@ export interface Album {
 export interface AlbumDetail {
   album: Album;
   songs: Song[];
+}
+
+/** 网易云电台（djradio）元数据；电台由主播/用户发布，节目见 DjRadioProgram。 */
+export interface DjRadio {
+  id: string;
+  name: string;
+  picUrl: string;
+  desc: string;
+  dj: {
+    userId: string;
+    nickname: string;
+    avatarUrl: string;
+    signature?: string;
+  };
+  /** 上游制作计数；与列表可见期数不等，卡片不展示，来源见 ADR 2026-11-07。 */
+  programCount: number;
+  subCount: number;
+  /** 上游互动计数；本票无消费方，仅保留字段来源，见 ADR 2026-11-07。 */
+  shareCount: number;
+  commentCount: number;
+  createTime: number;
+  lastProgramCreateTime: number;
+  lastProgramId: string;
+  category: string;
+  secondCategory?: string;
+  sourceType: SourceKey;
+}
+
+/**
+ * 电台节目（一期）。播放身份继承 Song.id（= mainSong.id）；
+ * programId 只作内容身份/节目详情，不可拿来解析音频。
+ */
+export interface DjRadioProgram extends Song {
+  programId: string;
+  radioId: string;
+  serialNum: number;
+  createTime: number;
+  listenerCount: number;
+  /** 单期简介纯文本（优先 programDesc，其次 description）。 */
+  description: string;
+  coverUrl: string;
+}
+
+/** 电台节目分页（total = 列表可见期数，不承诺详情 programCount）。 */
+export interface DjRadioProgramsPage {
+  programs: DjRadioProgram[];
+  total: number;
+  more: boolean;
+}
+
+/** 按用户取电台（歌手页 / 主播页共用）。 */
+export interface DjRadioListPage {
+  radios: DjRadio[];
+  total: number;
+  more: boolean;
+  subCount: number;
 }
 
 /** 播放模式 — 与 mobile/settingsStore.ts 对齐 */
