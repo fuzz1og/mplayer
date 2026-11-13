@@ -15,7 +15,7 @@ SKILL.md §1 的桌面分支。共享流程（命题清单 / 强度阶梯 / 附 
 
 ## 身份锚
 
-先证明 5174 上那份 Vite 服务的就是**这个 worktree**。这里的坑不是「找不到锚」，而是**跑错了也不报错**：`vite.config.ts:53-54` 只写 `port: 5174`、没写 `strictPort`，端口被别的 checkout 占用时 Vite 自己加一（5175），而 `scripts/start-electron-dev.mjs:10` 照样注入 `http://localhost:5174`——你驱动的是别人的渲染层，IPC 校验还照放行。三条，从弱到强：
+先证明 5174 上那份 Vite 服务的就是**这个 worktree**。这里的坑不是「找不到锚」，而是**跑错了也不报错**：`vite.config.ts` 的 dev server 只写 `port: 5174`、没写 `strictPort`，端口被别的 checkout 占用时 Vite 自己加一（5175），而 `scripts/start-electron-dev.mjs` 照样注入默认的 `http://localhost:5174`——你驱动的是别人的渲染层，IPC 校验还照放行。三条，从弱到强：
 
 1. 读 `npm run dev` 的输出：必须是 `Local: http://localhost:5174/`。出现 `Port 5174 is in use` 就杀干净重来，别接着跑。
 2. 断言窗口 URL：`page.url().startsWith('http://localhost:5174')`——只证明「是个 dev server」，不证明是哪一个。
@@ -27,7 +27,7 @@ curl.exe -s http://localhost:5174/src/renderer/components/SongRow.tsx | Select-S
 
 Vite 按需转译（TS → ESM）后原样送出源码文本，符号名与字符串字面量都在；命中即证明这份文件正在被服务（改的是 CSS 就取 `.css`；路径用改动文件的仓库相对路径）。与移动分支对 bundle 做的是同一件事，只是这里的真相源是 dev server 的模块图。
 
-主进程 / preload 的改动**不在** Vite 的模块图里：`vite-plugin-electron` 把它们打到 `dist-electron/`（`vite.config.ts:11-45`，入口 `src/main/main.ts` / `src/main/preload.ts`），换成对产物做同一招：
+主进程 / preload 的改动**不在** Vite 的模块图里：`vite-plugin-electron` 把它们打到 `dist-electron/`（`vite.config.ts` 的 electron 插件段，入口 `src/main/main.ts` / `src/main/preload.ts`），换成对产物做同一招：
 
 ```powershell
 Get-Item dist-electron/main.js | Select-Object LastWriteTime
@@ -42,10 +42,10 @@ Select-String -Path dist-electron/main.js -SimpleMatch '你改的新符号'
 
 四条前置，每条对应一种「看起来像应用坏了」的症状：
 
-1. **`ELECTRON_RUN_AS_NODE` 必须清掉。** DSH 会把它传给子进程；留着 Electron 退化成纯 Node，启动即 `Cannot read properties of undefined (reading 'getVersion')`。`scripts/start-electron-dev.mjs:25` 已代为 `delete`——所以走这个脚本，别自己 `spawn(electron)`。
+1. **`ELECTRON_RUN_AS_NODE` 必须清掉。** DSH 会把它传给子进程；留着 Electron 退化成纯 Node，启动即 `Cannot read properties of undefined (reading 'getVersion')`。`scripts/start-electron-dev.mjs` 的 `delete env.ELECTRON_RUN_AS_NODE` 已代为清理——所以走这个脚本，别自己 `spawn(electron)`。
 2. **`packages/core/dist` 必须新鲜**（`npm run core:build`）。Vite 吃 dist、typecheck 吃源码；dist 落后是**白屏**，唯一线索在渲染层控制台：`does not provide an export named '…'`。
-3. **`VITE_DEV_SERVER_URL=http://localhost:5174`。** 主进程按它放行 IPC sender（`src/main/main.ts:98-107`）——漏了则所有 IPC 被拒，页面还在但什么都点不动。脚本 `:10` 注入默认值。
-4. **路由是 hash 路由**（`src/renderer/router/index.tsx:2,70` 的 `createHashRouter` + 全 `lazy`）：`http://localhost:5174/#/hotlist/netease`。写成 `/hotlist/netease` 会落在首页——看起来像「页面不存在」，其实是路由没匹配。
+3. **`VITE_DEV_SERVER_URL=http://localhost:5174`。** 主进程按它放行 IPC sender（`src/main/main.ts` 的 `VITE_DEV_SERVER_URL` sender 放行）——漏了则所有 IPC 被拒，页面还在但什么都点不动。脚本注入默认值。
+4. **路由是 hash 路由**（`src/renderer/router/index.tsx` 的 `createHashRouter` + 全 `lazy`）：`http://localhost:5174/#/hotlist/netease`。写成 `/hotlist/netease` 会落在首页——看起来像「页面不存在」，其实是路由没匹配。
 
 起法：
 
@@ -56,14 +56,14 @@ npm run dev
 node scripts/start-electron-dev.mjs --remote-debugging-port=9222
 ```
 
-接管 + 断言 + 取证的最小骨架，写到 `test-results/tmp-verify.mjs`（`.gitignore:51` 已忽略，跑完删）：
+接管 + 断言 + 取证的最小骨架，写到 `test-results/tmp-verify.mjs`（`.gitignore` 的 `test-results/` 已忽略，跑完删）：
 
 ```js
 import { chromium } from '@playwright/test';
 import fs from 'node:fs';
 
 const browser = await chromium.connectOverCDP('http://127.0.0.1:9222');
-// dev 模式主进程会自动开 DevTools（src/main/main.ts:155-159），那是另一个窗口/target
+// dev 模式主进程会自动开 DevTools（src/main/main.ts 的 openDevTools 分支），那是另一个窗口/target
 const page = browser.contexts()[0].pages().find((p) => p.url().includes('localhost:5174'));
 if (!page) throw new Error('没有 5174 的窗口：确认 Vite 在跑、URL 用 hash 写法');
 
@@ -84,15 +84,15 @@ fs.writeFileSync('test-results/evidence.png', Buffer.from(shot.data, 'base64'));
 await browser.close(); // 只断 CDP，Electron 进程还活着（见「收尾」）
 ```
 
-窗口还没出现时按 `e2e/player-bar-add-to-playlist.spec.ts:47-54` 那样轮询，不要用 `firstWindow()`。
+窗口还没出现时按 `e2e/player-bar-add-to-playlist.spec.ts` 的窗口筛选段那样轮询，不要用 `firstWindow()`。
 
-**截图必须走 CDP `Page.captureScreenshot`**：`page.screenshot()` 在字体没就绪时会卡在 `waiting for fonts to load`（`docs/agents/testing.md:45`）。
+**截图必须走 CDP `Page.captureScreenshot`**：`page.screenshot()` 在字体没就绪时会卡在 `waiting for fonts to load`（`docs/agents/testing.md`「桌面手动驱动 Electron」）。
 
-**不要在测试里用 `_electron.launch`**：实测在本机 DSH 会话内起出白屏（渲染层报 `renderer.bundle.js script failed to run`，`docs/agents/testing.md:40`）。退路就是上面这条。
+**不要在测试里用 `_electron.launch`**：实测在本机 DSH 会话内起出白屏（渲染层报 `renderer.bundle.js script failed to run`，`docs/agents/testing.md`「桌面手动驱动 Electron」）。退路就是上面这条。
 
 ## 主进程日志
 
-现状是**没有文件落点**：主进程只有 `console.*`（`src/main/main.ts:100,143,233` 等），落到 Electron 进程的 stdout/stderr，而 `scripts/start-electron-dev.mjs:33` 用 `stdio: 'inherit'` 把它们交给启动它的那个终端。仓库根目录那些 `electron-dev.out.log` 是人手 tee 出来的，没有任何脚本产生它们。**主进程的真相要靠你自己接住**——要么重定向到文件，要么用进程内已有的出口。
+现状是**没有文件落点**：主进程只有 `console.*`（`src/main/main.ts`），落到 Electron 进程的 stdout/stderr，而 `scripts/start-electron-dev.mjs` 的 `stdio: 'inherit'` 把它们交给启动它的那个终端。仓库根目录那些 `electron-dev.out.log` 是人手 tee 出来的，没有任何脚本产生它们。**主进程的真相要靠你自己接住**——要么重定向到文件，要么用进程内已有的出口。
 
 重定向（PowerShell 里 `%TEMP%` **不会**展开，写全路径）：
 
@@ -102,12 +102,12 @@ node scripts/start-electron-dev.mjs --remote-debugging-port=9222 1> '<绝对路�
 
 进程内已有出口（都要求 dev 模式 / 诊断开启）：
 
-- `playbackTrace:list | clear | export` IPC——主进程播放解析链的会话内环形缓冲，`export` 弹保存对话框写 JSON（`src/main/ipc/playbackTrace.ts:7-21`，架构侧见 `docs/agents/architecture.md:51`）；
-- 渲染层 `rendererLogStore`——全局接管 console 的约 30 行环形缓冲，只在诊断开启时记录（`docs/agents/architecture.md:36`）。
+- `playbackTrace:list | clear | export` IPC——主进程播放解析链的会话内环形缓冲，`export` 弹保存对话框写 JSON（`src/main/ipc/playbackTrace.ts` 的 IPC 注册，架构侧见 `docs/agents/architecture.md`「IPC Channels」的 `playbackTrace`）；
+- 渲染层 `rendererLogStore`——全局接管 console 的约 30 行环形缓冲，只在诊断开启时记录（`docs/agents/architecture.md` 的 `rendererLogStore` 条）。
 
 ## 收尾
 
-**关窗只是隐藏。** `mainWindow.on('close')` 是 `preventDefault()` + `hide()`（`src/main/main.ts:169-174`），`window-all-closed` 只在非 darwin 才 `quit()`（`:427-431`），`before-quit` 才置 `isQuitting`（`:434-436`）；托盘的「✕ 退出」是唯一优雅退出（`src/main/tray/trayManager.ts:53-58`）。所以「窗口没了」不等于「跑完了」，退出要硬杀。
+**关窗只是隐藏。** `mainWindow.on('close')` 是 `preventDefault()` + `hide()`（`src/main/main.ts` 的 `close` 拦截），`window-all-closed` 只在非 darwin 才 `quit()`，`before-quit` 才置 `isQuitting`；托盘的「✕ 退出」是唯一优雅退出（`src/main/tray/trayManager.ts` 的「退出 MPlayer」）。所以「窗口没了」不等于「跑完了」，退出要硬杀。
 
 **没有单实例锁**（`src/main/**` grep `requestSingleInstanceLock` = 0 命中）：泄漏的实例会和下一次运行**共享 `%APPDATA%\mplayer`**（同一份 storage / 缓存 / 队列），两个进程互相写盘、互抢 9222，症状是「上一轮的队列还在」「截图里是上一个版本」。
 
@@ -118,15 +118,15 @@ Get-Process electron, MPlayer -ErrorAction SilentlyContinue | Select-Object Id, 
 Stop-Process -Name electron -Force
 ```
 
-（打包产物的进程名是 `MPlayer`；`scripts/prebuild.js:8` 也是这么杀的。）截图与临时脚本落 `e2e/screenshots/`、`e2e/artifacts/`、`test-results/`——三者均已 gitignore（`.gitignore:49-51`）。
+（打包产物的进程名是 `MPlayer`；`scripts/prebuild.js` 的 taskkill 也是这么杀的。）截图与临时脚本落 `e2e/screenshots/`、`e2e/artifacts/`、`test-results/`——三者均已 gitignore（`.gitignore` 的 `e2e/screenshots/`、`e2e/artifacts/`、`test-results/`）。
 
 ## 桌面陷阱速查
 
-- **没有稳定入口**：`package.json:15-43` 没有任何 e2e / playwright script，`scripts/verify.mjs:279-289` 没有 e2e scope，接 CI 已被否决（`docs/adr/2026-09-29-ci-verification-boundary.md:35`）。今天唯一跑法是 `npx playwright test`——**当前缺一个稳定入口**，别写出不存在的 `npm run e2e:desktop`。
-- **12 个 spec 未接 CI 且已腐化**，用之前先看这三行：`cover-e2e.spec.ts:16` 与 `cover-scenarios.spec.ts:16` 把 dev server 打成 **5173**（Vite 在 5174）；`discover-v2.spec.ts:10` 指向已退役的自建 API；**12 个 spec 里 9 个根本不传 `VITE_DEV_SERVER_URL`**，主进程于是回落到 `loadFile(dist/index.html)`（`src/main/main.ts:155-162`），测的是**上一次构建的产物**而不是工作副本；只有 `player-bar-add-to-playlist.spec.ts:41` 传对了。不先确认这一点，「测过了」是假的。
-- **Playwright 二进制缺失**（`Executable doesn't exist at …chromium_headless_shell-…`）：`npx playwright install chromium`（`e2e/README.md:253`）。`connectOverCDP` 接管真 Electron **不需要**它——这条报错只出现在 Playwright 自起浏览器（Chromium+stub 那一层）时。
-- **`npm run electron:dev` 会先 `core:build` 并删掉 `dist-electron/main.js`**（`package.json:23`）：它跑着的时候别改主进程源码，也别把重建中的白屏当成改动引入的问题。
-- **`npm run build` 有破坏性副作用**：`scripts/prebuild.js:8-13` 在 win32 上 `taskkill /f /im MPlayer.exe`，`:15-18` 删掉 `dist/` 与 `dist-electron/`。跑 build 前先收掉验收窗口，否则 `dist-electron/main.js` 被删、dev 中的 Electron 收不到主进程更新。
-- **没有 readiness 信号**：没有 app-ready IPC、没有 health 端点，spec 里全是 `waitForTimeout`（`e2e/electron-e2e.spec.ts:19-20`）。改用 `page.waitForFunction(() => !!document.getElementById('root')?.children.length)` 轮询（`e2e/player-bar-add-to-playlist.spec.ts:59`）。
-- **DevTools 是另一个窗口/target**，dev 模式自动开（`src/main/main.ts:155-159`）；`firstWindow()` 可能给你 DevTools，必须按 URL 选窗口（`e2e/player-bar-add-to-playlist.spec.ts:47-54`）。
-- **locator 基本只能吃中文文案**：生产代码里 `data-testid` 只有 `PlayerControls.tsx:57` 一处；可用的稳定钩子是 class（`.song-row`，`src/renderer/components/SongRow.tsx:115`）与文案（`page.getByText('发现音乐')`、`page.getByPlaceholder('搜索音乐、歌手、专辑')`，`e2e/electron-e2e.spec.ts:52-60`）。
+- **没有稳定入口**：`package.json` 的 `scripts` 没有任何 e2e / playwright script，`scripts/verify.mjs` 的 `SCOPES` 没有 e2e scope，接 CI 已被否决（`docs/adr/2026-09-29-ci-verification-boundary.md`「备选与否决」的 Playwright 条）。今天唯一跑法是 `npx playwright test`——**当前缺一个稳定入口**，别写出不存在的 `npm run e2e:desktop`。
+- **e2e/ 下的 spec 未接 CI，部分已腐化**，用之前先看这三行：`cover-e2e.spec.ts` 与 `cover-scenarios.spec.ts` 的 `VITE_DEV_SERVER_URL` 把 dev server 打成 **5173**（Vite 在 5174）；`discover-v2.spec.ts` 的 `MUSIC_API_URL` 指向已退役的自建 API；**多数 spec 根本不传 `VITE_DEV_SERVER_URL`**，主进程于是回落到 `loadFile(dist/index.html)`（`src/main/main.ts`），测的是**上一次构建的产物**而不是工作副本；只有 `player-bar-add-to-playlist.spec.ts` 的 `VITE_DEV_SERVER_URL` 传对了。不先确认这一点，「测过了」是假的。
+- **Playwright 二进制缺失**（`Executable doesn't exist at …chromium_headless_shell-…`）：`npx playwright install chromium`（`e2e/README.md`「安装 Playwright 浏览器」）。`connectOverCDP` 接管真 Electron **不需要**它——这条报错只出现在 Playwright 自起浏览器（Chromium+stub 那一层）时。
+- **`npm run electron:dev` 会先 `core:build` 并删掉 `dist-electron/main.js`**（`package.json` 的 `electron:dev`）：它跑着的时候别改主进程源码，也别把重建中的白屏当成改动引入的问题。
+- **`npm run build` 有破坏性副作用**：`scripts/prebuild.js` 的 taskkill 在 win32 上杀 `MPlayer.exe`，随后删掉 `dist/` 与 `dist-electron/`。跑 build 前先收掉验收窗口，否则 `dist-electron/main.js` 被删、dev 中的 Electron 收不到主进程更新。
+- **没有 readiness 信号**：没有 app-ready IPC、没有 health 端点，spec 里全是 `waitForTimeout`（`e2e/electron-e2e.spec.ts` 的 `waitForTimeout`）。改用 `page.waitForFunction(() => !!document.getElementById('root')?.children.length)` 轮询（`e2e/player-bar-add-to-playlist.spec.ts` 的 `waitForFunction`）。
+- **DevTools 是另一个窗口/target**，dev 模式自动开（`src/main/main.ts` 的 dev 模式 `openDevTools`）；`firstWindow()` 可能给你 DevTools，必须按 URL 选窗口（`e2e/player-bar-add-to-playlist.spec.ts` 的窗口筛选段）。
+- **locator 基本只能吃中文文案**：生产代码里 `data-testid` 只有 `PlayerControls.tsx` 一处；可用的稳定钩子是 class（`.song-row`，`src/renderer/components/SongRow.tsx`）与文案（`page.getByText('发现音乐')`、`page.getByPlaceholder('搜索音乐、歌手、专辑')`，`e2e/electron-e2e.spec.ts` 的中文文案断言）。

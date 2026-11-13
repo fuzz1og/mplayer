@@ -126,7 +126,7 @@ node .agents/skills/runtime-verification/scripts/dev-build.mjs
 **成立标准分两段**（这是最容易误解的地方：三段并成一段跑，等于每次冷启都 3 条全不命中、脚本恒 exit 1 的假失败）：
 
 1. **启动阶段 —— 决定退出码**：身份锚通过 + logcat 轮询到 `Running "main"`，且没有 `undefined is not a function`（后者 = core dist 断裂）。冷启一次就该绿。
-2. **播放后 —— 只在 `--after-play` 时跑，不决定退出码**：三条 `dumpsys` 只证明「真的在 dev build 的播放语义下」，结构上都要**正在播放**才有——`expo.modules.mplayerplayer.PlayerService` 且 `isForeground=true`、media_session 里出现 `Media button session is com.mplayer.mobile.dev/…`、通知渠道出现 `music-playback-native`。不成立说明还在 Expo Go 语义下。（旧 skill 写的 `AudioControlsService` / `music-playback` 已随 expo-audio → 自写 native-player 退役：`packages/mobile/android/app/src/main/AndroidManifest.xml:25-26` 的 I3 注释、`modules/native-player/android/src/main/res/values/strings.xml:3`。照旧名字 grep 永不命中，会把完全正常的后台播放误判成「还在 Expo Go 语义下」。）
+2. **播放后 —— 只在 `--after-play` 时跑，不决定退出码**：三条 `dumpsys` 只证明「真的在 dev build 的播放语义下」，结构上都要**正在播放**才有——`expo.modules.mplayerplayer.PlayerService` 且 `isForeground=true`、media_session 里出现 `Media button session is com.mplayer.mobile.dev/…`、通知渠道出现 `music-playback-native`。不成立说明还在 Expo Go 语义下。（旧 skill 写的 `AudioControlsService` / `music-playback` 已随 expo-audio → 自写 native-player 退役：`packages/mobile/android/app/src/main/AndroidManifest.xml` 的 I3 注释、`modules/native-player/android/src/main/res/values/strings.xml` 的 `mplayer_native_channel_id`。照旧名字 grep 永不命中，会把完全正常的后台播放误判成「还在 Expo Go 语义下」。）
 
 **附带好处**：`console.log` 在 dev build 的 logcat 可见，`[player]` 一类排查优先在 dev build 上做。**本仓确定不剥 `console`**（Metro / Babel 未开 console 剥离插件，`packages/mobile/stores/logsStore.ts` 的注释即此口径），release 上这类日志同样进 logcat。
 
