@@ -2,7 +2,7 @@
 
 > 日期：2026-11-16 · 分支：`claude/ui-ux-page-review-de756f` · 来源：UI/UX 审查后的设计会话收敛，to-spec 留痕
 > 状态：已实施（2026-11-16，未提交）。方向板：`design/mobile-discover-axtc.html`（会话资产，不入库）；对照 `design/mobile-visual-directions.html`。
-> 决策：A×C 混合；暖琥珀强调；发现页不重复可见页名；性能优先，不做滚动区实时模糊。桌面端本次不动。
+> 决策：发现页结构重做，**主题色沿用现有蓝调**（应用图标已定，2026-11-16 真机验收后确认不改色）；发现页不重复可见页名；性能优先，不做滚动区实时模糊。桌面端本次不动。
 
 ## Problem Statement
 
@@ -12,7 +12,7 @@
 
 ## Solution
 
-- 视觉方向定为 **A×C**：A 的深靛蓝骨架（`#0F0F23` / `#1B1B30` / 16px 圆角），C 的封面光（今日焦点 hero 用封面图 + 静态渐变），强调色从荧光绿改为暖琥珀（暗色 `#FFB86B`、浅色 `#9A3412`）。图标默认中性，只有 active tab、播放键、进度、主按钮使用强调色。
+- 视觉方向：沿用现有蓝色双主题与 `palette.blue*` 强调色，不换主题色；只保留 C 的封面光思路（今日焦点 hero 用封面图 + 静态深色渐变），图标默认中性，只有 active tab、播放键、进度、主按钮使用强调色。
 - 发现页去掉内容区可见页头：顶部只保留「排行榜 / 新碟 / 歌单 / 歌手」内容 tab + 来源切换；页名只保留在底部 tab、路由标题和读屏 h1。
 - 发现页结构改为：今日焦点 hero + 当前来源的热歌/新歌两个 section；新碟、歌单、歌手沿用现有数据面，统一卡片与间距。
 - 其他屏幕只做 token 替换、间距/字号/圆角统一，以及已确认的小 bug；不改导航与信息架构。
@@ -41,10 +41,10 @@
 
 ### 1. Token 基座（`packages/mobile/theme/tokens.ts`）
 
-- 颜色：深色 `bgBase #0F0F23` / `bgSurface #1B1B30` / `bgElevated #242440` / `bgHover #2A2A48` / `textPrimary #F7F8FC` / `textSecondary #98A2B8` / `accent #FFB86B`；浅色 `bgBase #F4F1EA` / `bgSurface #FFFFFF` / `bgElevated #FBF8F2` / `bgHover #ECE7DD` / `textPrimary #1B1B2A` / `textSecondary #5E6272` / `accent #9A3412`。
-- `textTertiary` 保持“装饰/提示”低对比语义，不用于有效正文；有效 meta 改用 `textSecondary`。`inputPlaceholder` 提到 ≥4.5:1（浅色 `#6E6E73`、深色 `#A8B0C2`）。
+- 颜色：**沿用现有蓝调双主题**，不换主题色。`accent` 保持浅色 `palette.blue500` / 深色 `palette.blue350`，背景/文字/边框/输入框全部沿用原值；`bgBase` 浅色 `#F2F2F7`、深色 `#000000`。
+- `textTertiary` 保持“装饰/提示”低对比语义，不用于有效正文；有效 meta 改用 `textSecondary`（不改色值）。
 - 强调色只用于 active / 播放 / 进度 / 主按钮；选中列表用表面明度差（`bgHover`/`bgActive`），不用强调色铺底。
-- `textInverse` 在深色主题为 `#2A1B10`（琥珀实底上的深字），浅色主题为 `#FFFFFF`。
+- `textInverse` 保持原值：浅色白字，深色 `palette.gray900`。
 - 语义色沿用现有 `dangerText/warningText/successText` 纪律；源品牌色只出现在 `SourceBadge`。
 - 字体：`largeTitle 24/700`、`titleLg 20/700`、`title 17/700`、`sectionHeader 17/700`、`body 15/500`、`subhead 14/500`、`footnote 13/400`、`caption 12/400`、`micro 10/600`；时间/排名/计数一律 `tabular-nums`。
 - 间距：页面沟槽 16、区块间距 24、网格间距 12；歌曲行沿用 `SONG_ROW`（#416 单一事实源，封面 44 / 行高约 64），本轮不缩行——缩行要同步改所有列表页与骨架，超出「对齐」范围。圆角：控件 8、卡片 12、hero 16、sheet 12–20。
@@ -86,7 +86,7 @@
 
 ### 5. 主题
 
-- 深色是主视觉；浅色是“日光版”：暖纸底、白卡片、深靛蓝文字、深锈色强调。
+- 双主题颜色沿用现有蓝色体系，不在本次改版中更换；浅色仍为灰底白卡片，深色仍为黑底灰卡片。
 - 两套 token 必须一一对应；新增/改名 token 时同步 `theme/README.md` 映射表。
 - 源品牌色只在 `SourceBadge`；文字徽章走 `sourceText` 双主题变体。
 
@@ -109,7 +109,7 @@
 
 ## Further Notes
 
-- 设计决策：A×C；暖琥珀；发现页无可见页头；性能优先；浅色日光版。
-- 方向板：`design/mobile-discover-axtc.html`（A×C 发现页）、`design/mobile-visual-directions.html`（三方向对照）。均为会话资产，不入库。
+- 设计决策：发现页结构重做；主题色沿用现有蓝调（图标已定，2026-11-16 确认不改色）；无可见页头；性能优先。
+- 方向板：`design/mobile-discover-axtc.html`（结构参考）、`design/mobile-visual-directions.html`（三方向对照）。均为会话资产，不入库；A×C 配色部分不采用。
 - 实施前按仓库流程开 issue（`[Feature]: 移动端发现页视觉改版与 token 统一`）；本视觉方向变更建议单独补一条 ADR（移动端视觉方向与性能策略），再动代码。
 - 桌面端后续细节 pass 清单见本次 UI/UX 审查结论：chrome 材质、可见页名、选中态、筛选控件收敛、播放栏去蓝、对比度、动效克制、空/错态。

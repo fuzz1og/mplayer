@@ -1,5 +1,5 @@
 /**
- * MPlayer mobile 设计系统 — A×C 视觉方向（深靛蓝 + 暖琥珀；#173 起支持双主题）
+ * MPlayer mobile 设计系统 — 沿用桌面同源蓝色双主题（#173）；2026-11-16 只收敛字号层级
  * 使用方式（组件内取色一律走 useTheme，禁止再静态 import colors）：const { colors } = 
  * useTheme();const styles = useMemo(() => makeStyles(colors), [colors]);
  */
@@ -28,8 +28,7 @@ export const palette = {
   gray900: '#1C1C1E',
   gray950: '#121214',
 
-  /** 经典蓝阶 — 与 desktop `--blue-*` 对齐保留；2026-11-16 起不再是移动端 accent
-   *  （改深靛蓝 + 暖琥珀），新代码别再用它当品牌色。 */
+  /** 品牌色 — 经典蓝（与 desktop --blue-* 一致）；blue300 供暗底提亮用 */
   blue50: '#E7EDFB',
   blue100: '#C9D7F4',
   blue300: '#6FA3EF',
@@ -56,23 +55,6 @@ export const palette = {
   /** 成功色（emerald400 供暗底提亮用） */
   emerald400: '#34D399',
   emerald500: '#10B981',
-
-  /** A×C 视觉方向（2026-11-16）：深靛蓝 + 暖琥珀；浅色为暖纸日光版 */
-  paper: '#F4F1EA',
-  paper100: '#FBF8F2',
-  ink900: '#1B1B2A',
-  inkInverse: '#2A1B10',
-  indigo950: '#0F0F23',
-  indigo900: '#1B1B30',
-  indigo800: '#242440',
-  indigo700: '#2A2A48',
-  indigo600: '#32325A',
-  signal300: '#FFD9AE',
-  signal350: '#FFC98A',
-  signal400: '#FFB86B',
-  rust600: '#9A3412',
-  rust700: '#7C2D12',
-  rust800: '#6B2410',
 } as const;
 
 /**
@@ -125,13 +107,13 @@ export const sourceTextDark: Record<SourceKey | 'all', string> = {
  * 硬件本体双主题共用（唱片机本来就是黑的），不随主题翻转。
  */
 export const turntable = {
-  plinth: '#1B1B30',
-  platter: '#0B0B14',
-  platterBorder: '#2A2A50',
-  coverBorder: '#15152B',
-  tonearm: '#9AA0B5',
-  tonearmPivot: '#7C8199',
-  tonearmPivotBorder: '#B9BED1',
+  plinth: '#222240',
+  platter: '#111111',
+  platterBorder: '#333333',
+  coverBorder: '#1A1A1A',
+  tonearm: '#999999',
+  tonearmPivot: '#888888',
+  tonearmPivotBorder: '#BBBBBB',
 } as const;
 
 /**
@@ -141,31 +123,31 @@ export const turntable = {
 export const playerForeground = {
   dark: {
     primary: '#FFFFFF',
-    secondary: 'rgba(255,255,255,0.74)',
-    tertiary: 'rgba(255,255,255,0.64)',
-    icon: 'rgba(255,255,255,0.88)',
-    iconSoft: 'rgba(255,255,255,0.82)',
+    secondary: 'rgba(255,255,255,0.7)',
+    tertiary: 'rgba(255,255,255,0.5)',
+    icon: 'rgba(255,255,255,0.85)',
+    iconSoft: 'rgba(255,255,255,0.8)',
     badgeBg: 'rgba(255,255,255,0.14)',
-    badgeText: 'rgba(255,255,255,0.82)',
+    badgeText: 'rgba(255,255,255,0.8)',
     skeleton: 'rgba(255,255,255,0.18)',
-    lyricFull: 'rgba(255,255,255,0.72)',
+    lyricFull: 'rgba(255,255,255,0.6)',
   },
   light: {
     primary: '#16181E',
-    secondary: 'rgba(22,24,30,0.78)',
-    tertiary: 'rgba(22,24,30,0.62)',
-    icon: 'rgba(22,24,30,0.88)',
-    iconSoft: 'rgba(22,24,30,0.82)',
+    secondary: 'rgba(22,24,30,0.75)',
+    tertiary: 'rgba(22,24,30,0.55)',
+    icon: 'rgba(22,24,30,0.85)',
+    iconSoft: 'rgba(22,24,30,0.8)',
     badgeBg: 'rgba(22,24,30,0.08)',
-    badgeText: 'rgba(22,24,30,0.82)',
+    badgeText: 'rgba(22,24,30,0.8)',
     skeleton: 'rgba(22,24,30,0.12)',
-    lyricFull: 'rgba(22,24,30,0.72)',
+    lyricFull: 'rgba(22,24,30,0.6)',
   },
 } as const;
 /** 全屏播放器固定渐变背景（双端，方案 C：不随封面防白封面跳变） */
 export const playerBackground: Record<'dark' | 'light', [string, string, string]> = {
-  dark: ['#20203A', '#15152B', '#0A0A16'],
-  light: ['#E8E1D5', '#F1ECE3', '#F7F3EA'],
+  dark: ['#20242D', '#151821', '#0A0C10'],
+  light: ['#D5DAE3', '#E1E5EB', '#ECEEF3'],
 };
 
 /**
@@ -402,65 +384,76 @@ export const opacity = {
 
 /** 浅色主题（默认，与 desktop 浅色一致） */
 export const lightColors: ThemeColors = {
-  /* 背景层级：暖纸日光版（A×C，2026-11-16） */
-  bgBase: palette.paper,
+  /* 背景层级 */
+  // 页面底用 iOS systemGroupedBackground 标准浅灰（#F2F2F7）：原 gray50 #FAFAFA 近白，
+  // 灰一档让「白卡片 vs 灰底」的层级更明显（卡片层保持纯白）
+  bgBase: '#F2F2F7',
   bgSurface: '#FFFFFF',
-  bgElevated: palette.paper100,
+  bgElevated: '#FFFFFF',
   bgSidebar: '#FFFFFF',
-  bgPlayer: 'rgba(255, 255, 255, 0.94)',
-  bgHover: '#ECE7DD',
-  bgActive: '#E3DDD1',
-  bgOverlay: 'rgba(15, 15, 35, 0.42)',
-  segmentTrack: 'rgba(27, 27, 42, 0.08)',
+  // 无 blur 的纯半透明在浅色下与白底明度差为零、chrome 隐形（真机验证），按指南 §2.2 无 
+  // backdrop-filter 兜底思路提不透明度：保留一丝材质感，分层靠「白 chrome vs 灰底」明度差（§1 柱子
+  // 一）。
+  bgPlayer: 'rgba(255, 255, 255, 0.98)',
+  bgHover: palette.gray100,
+  bgActive: palette.gray200,
+  bgOverlay: 'rgba(0, 0, 0, 0.4)',
+  segmentTrack: 'rgba(120, 120, 128, 0.12)',
   blurScrim: 'rgba(255, 255, 255, 0.15)',
 
-  /* 文字层级：tertiary 只作装饰/提示；有效 meta 用 secondary */
-  textPrimary: palette.ink900,
-  textSecondary: '#5E6272',
+  /* 文字层级 */
+  textPrimary: palette.gray900,
+  textSecondary: palette.gray600,
   textTertiary: palette.gray400,
-  textDisabled: '#C9C3B8',
+  textDisabled: palette.gray300,
   textInverse: '#FFFFFF',
-  textLink: palette.rust700,
+  textLink: palette.blue600,
 
   /* 边框 */
-  borderDefault: 'rgba(27, 27, 42, 0.12)',
-  borderSubtle: 'rgba(27, 27, 42, 0.07)',
-  borderStrong: 'rgba(27, 27, 42, 0.20)',
+  borderDefault: palette.gray200,
+  borderSubtle: palette.gray100,
+  borderStrong: palette.gray300,
 
-  /* 交互色：暖琥珀的浅色版（深锈色保证 4.5:1） */
-  accent: palette.rust600,
-  accentHover: palette.rust700,
-  accentActive: palette.rust800,
-  accentSubtle: 'rgba(154, 52, 18, 0.10)',
-  accentText: palette.rust700,
+  /* 交互色 */
+  accent: palette.blue500,
+  accentHover: palette.blue600,
+  accentActive: palette.blue700,
+  accentSubtle: palette.blue50,
+  accentText: palette.blue600,
 
   danger: palette.red500,
   dangerHover: palette.red600,
   dangerSubtle: palette.red50,
-  dangerText: palette.red650,
+  dangerText: palette.red650, // #318 审计：亮色 danger 文字对页底 ≥4.5:1
 
   warning: palette.amber500,
   warningSubtle: '#FFFBEB',
-  warningText: palette.rust600,
+  /** 琥珀当文字过淡（#F59E0B 白底 ≈2.1:1），用深琥珀达标 */
+  warningText: '#B45309',
   success: palette.emerald500,
+  /** emerald500 当文字仅 ≈2.3:1，用深 emerald 达标 */
   successText: '#047857',
 
   /* 音乐源文字徽章（ADR-0006：浅色加深） */
   sourceText: sourceTextLight,
 
-  /* 榜单前三名：暖琥珀色阶 */
-  rankText: ['#9A3412', '#A16207', '#8A5A12'] as const,
+  /* 榜单前三名（#186 #8：浅色加深，红/橙/琥珀） */
+  rankText: ['#C0392B', '#B45309', '#A16207'] as const,
 
   /* 输入框 */
-  inputBg: '#F7F3EA',
+  inputBg: palette.gray50,
   inputBgFocus: '#FFFFFF',
-  inputBorder: 'rgba(27, 27, 42, 0.12)',
-  inputBorderFocus: palette.rust600,
-  inputPlaceholder: '#6E6E73',
+  inputBorder: palette.gray200,
+  inputBorderFocus: palette.blue500,
+  inputPlaceholder: palette.gray400,
 
-  /* 骨架屏：暖纸底上可见 */
-  skeletonBase: '#D8D1C4',
-  skeletonShine: '#EDE8DF',
+  /**
+   * 骨架屏骨架屏（#318 真机实测）：原 gray100 #F5F5F7 比亮色页底 #F2F2F7 还浅，对比度只有 1.02:1 
+   * —— 亮色下骨架块基本不可见（shimmer 更看不见）。
+   * 可见度下限由 __tests__/skeletonContrast.test.ts 守住。
+   */
+  skeletonBase: palette.gray300,
+  skeletonShine: palette.gray100,
 };
 
 /**
@@ -469,37 +462,39 @@ export const lightColors: ThemeColors = {
  * 品牌蓝在暗底用 blue400（accent）/ blue300（accentText），避免发闷。
  */
 export const darkColors: ThemeColors = {
-  /* 背景层级：深靛蓝夜航（A×C，2026-11-16） */
-  bgBase: palette.indigo950,
-  bgSurface: palette.indigo900,
-  bgElevated: palette.indigo800,
-  bgSidebar: palette.indigo900,
-  bgPlayer: 'rgba(27, 27, 48, 0.92)',
-  bgHover: palette.indigo700,
-  bgActive: palette.indigo600,
-  bgOverlay: 'rgba(4, 4, 12, 0.62)',
-  segmentTrack: 'rgba(255, 255, 255, 0.08)',
+  /* 背景层级 */
+  // 对齐 iOS 深色标准：页面底纯黑 #000000（systemGroupedBackground），卡片/浮层已是标准色
+  bgBase: '#000000',
+  bgSurface: palette.gray900,
+  bgElevated: palette.gray850,
+  bgSidebar: palette.gray900,
+  // 真机反馈：0.85 偏透（tab 栏/全屏页与毛玻璃 chrome 观感不统一），提至 0.92
+  bgPlayer: 'rgba(28, 28, 30, 0.92)',
+  bgHover: palette.gray825,
+  bgActive: palette.gray750,
+  bgOverlay: 'rgba(0, 0, 0, 0.6)',
+  segmentTrack: 'rgba(120, 120, 128, 0.24)',
   blurScrim: 'rgba(0, 0, 0, 0.10)',
 
   /* 文字层级 */
-  textPrimary: '#F7F8FC',
-  textSecondary: '#98A2B8',
+  textPrimary: palette.gray50,
+  textSecondary: palette.gray400,
   textTertiary: palette.gray500,
-  textDisabled: '#5D6178',
-  textInverse: palette.inkInverse,
-  textLink: palette.signal400,
+  textDisabled: palette.gray700,
+  textInverse: palette.gray900,
+  textLink: palette.blue300,
 
   /* 边框 */
-  borderDefault: 'rgba(255, 255, 255, 0.09)',
-  borderSubtle: 'rgba(255, 255, 255, 0.06)',
-  borderStrong: 'rgba(255, 255, 255, 0.16)',
+  borderDefault: palette.gray750,
+  borderSubtle: palette.gray850,
+  borderStrong: palette.gray700,
 
-  /* 交互色：暖琥珀（暗底高对比） */
-  accent: palette.signal400,
-  accentHover: palette.signal350,
-  accentActive: '#F0A85A',
-  accentSubtle: 'rgba(255, 184, 107, 0.12)',
-  accentText: palette.signal300,
+  /* 交互色 */
+  accent: palette.blue350, // #318 审计：暗色 accent 文字需对 bgSurface/bgElevated ≥4.5:1
+  accentHover: palette.blue300,
+  accentActive: palette.blue500,
+  accentSubtle: 'rgba(61, 123, 217, 0.18)',
+  accentText: palette.blue300,
 
   danger: palette.red400,
   dangerHover: palette.red500,
@@ -508,26 +503,28 @@ export const darkColors: ThemeColors = {
 
   warning: palette.amber400,
   warningSubtle: 'rgba(251, 191, 36, 0.12)',
+  /** 暗底 amber400 足够（≈11:1），text 用同色；语义一致即可 */
   warningText: palette.amber400,
   success: palette.emerald400,
+  /** 暗底 emerald400 足够（≈9:1），text 用同色 */
   successText: palette.emerald400,
 
   /* 音乐源文字徽章（ADR-0006：深色提亮） */
   sourceText: sourceTextDark,
 
-  /* 榜单前三名：暖琥珀色阶 */
-  rankText: ['#FFB86B', '#E8B27A', '#C9A27A'] as const,
+  /* 榜单前三名（#186 #8：深色提亮，红/橙/琥珀） */
+  rankText: ['#F08080', '#F59E0B', '#FBBF24'] as const,
 
   /* 输入框 */
-  inputBg: palette.indigo800,
-  inputBgFocus: palette.indigo700,
-  inputBorder: 'rgba(255, 255, 255, 0.10)',
-  inputBorderFocus: palette.signal400,
-  inputPlaceholder: '#A8B0C2',
+  inputBg: palette.gray825,
+  inputBgFocus: palette.gray850,
+  inputBorder: palette.gray750,
+  inputBorderFocus: palette.blue400,
+  inputPlaceholder: palette.gray600,
 
   /* 骨架屏 */
-  skeletonBase: '#2A2A50',
-  skeletonShine: '#3A3A70',
+  skeletonBase: palette.gray825,
+  skeletonShine: palette.gray750,
 };
 
 /** 用户可选主题模式：system 跟随系统（默认），其余手动指定 */
