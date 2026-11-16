@@ -49,7 +49,11 @@ export default function SourceSwapModal({
             <Text style={styles.title}>
               {success ? '换源完整版' : candidates.length > 0 ? '选择要切换的版本' : '换源完整版'}
             </Text>
-            <ScalePress onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+            <ScalePress
+              onPress={onClose}
+              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              accessibilityLabel="关闭换源面板"
+            >
               <X size={22} color={colors.textSecondary} />
             </ScalePress>
           </View>
@@ -124,7 +128,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
@@ -139,10 +143,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    paddingVertical: 12,
+    paddingVertical: spacing[3],
     marginTop: spacing[2],
   },
-  backText: { ...textVariants.footnote, color: colors.textSecondary, marginLeft: 6 },
+  backText: { ...textVariants.footnote, color: colors.textSecondary, marginLeft: spacing[1] + 2 },
   loadingBox: { paddingVertical: spacing[6], alignItems: 'center' },
   loadingText: { ...textVariants.subhead, fontWeight: '400', color: colors.accent },
   successBox: { paddingVertical: spacing[6], alignItems: 'center' },

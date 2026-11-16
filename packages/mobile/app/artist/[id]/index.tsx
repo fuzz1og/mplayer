@@ -54,6 +54,11 @@ export default function ArtistDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  /** 首屏歌曲失败（显示错误态 + 重试，而不是「暂无歌曲」） */
+  const [songsError, setSongsError] = useState(false);
+  /** 分页失败（页脚给重试；失败后不再被 onEndReached 自动重试） */
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const [songsReloadKey, setSongsReloadKey] = useState(0);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [albumsTotal, setAlbumsTotal] = useState<number | null>(null);
   const [albumsError, setAlbumsError] = useState(false);
@@ -66,11 +71,15 @@ export default function ArtistDetailPage() {
   const displayName = artist?.name || name || '歌手';
   const displayPic = artist?.picUrl || pic || '';
 
-  const loadMore = useCallback(async () => {
+  const loadMore = useCallback(async (force = false) => {
     if (loadingMore || !hasMore || !id) return;
+    // 分页失败后 onEndReached 会反复触发；只有页脚重试（force）才重新发请求
+    if (loadMoreError && !force) return;
+    if (force) setLoadMoreError(false);
     setLoadingMore(true);
     try {
       const r = await getDirectClient('netease')!.getArtistSongs!(id, songs.length, 50);
+      setLoadMoreError(false);
       if (r.songs.length > 0) {
         setSongs(prev => [...prev, ...r.songs]);
         setHasMore(songs.length + r.songs.length < r.total);
@@ -79,10 +88,11 @@ export default function ArtistDetailPage() {
       }
     } catch (e) {
       console.error('[ArtistDetail] loadMore error:', e);
+      setLoadMoreError(true);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, id, songs.length]);
+  }, [loadingMore, hasMore, id, songs.length, loadMoreError]);
 
   useEffect(() => {
     if (!id) {
@@ -91,6 +101,8 @@ export default function ArtistDetailPage() {
     }
     let cancelled = false;
     setLoading(true);
+    setSongsError(false);
+    setLoadMoreError(false);
     (async () => {
       // 歌手信息按 id 校正（失败保留入口参数，不退化成「未知歌手」）
       void getArtistInfoRouted('netease', id).then((info) => {
@@ -104,12 +116,13 @@ export default function ArtistDetailPage() {
         setHasMore(songResult.songs.length < songResult.total);
       } catch (e) {
         console.error('[ArtistDetail] load error:', e);
+        if (!cancelled) setSongsError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, songsReloadKey]);
 
   // 专辑分区：只取**首屏一页**做预览；全量在同目录的 albums 时间线页里按 `more` 续页（#417 ①）
   useEffect(() => {
@@ -293,12 +306,35 @@ export default function ArtistDetailPage() {
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
           renderItem={renderItem}
-          onEndReached={loadMore}
+          onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
+          ListFooterComponent={
+            loadMoreError ? (
+              <ScalePress
+                style={styles.footerRetry}
+                onPress={() => void loadMore(true)}
+                accessibilityLabel="歌曲加载失败，重新加载"
+              >
+                <Text style={styles.footerRetryText}>加载失败，点此重试</Text>
+              </ScalePress>
+            ) : (
+              <LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />
+            )
+          }
           ListEmptyComponent={
             loading ? (
               <SongListSkeleton rows={6} showSource />
+            ) : songsError ? (
+              <View style={styles.empty}>
+                <Text style={styles.emptyText}>歌曲加载失败</Text>
+                <ScalePress
+                  style={styles.retryBtn}
+                  onPress={() => setSongsReloadKey((key) => key + 1)}
+                  accessibilityLabel="重新加载歌曲"
+                >
+                  <Text style={styles.retryText}>重试</Text>
+                </ScalePress>
+              </View>
             ) : (
               <View style={styles.empty}>
                 <Text style={styles.emptyText}>暂无歌曲</Text>
@@ -326,8 +362,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: spacing[3],
   },
   albumsTitle: { ...textVariants.body, fontWeight: typography.weights.semibold, color: colors.textPrimary },
-  albumsMore: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  albumsMoreText: { ...textVariants.footnote, color: colors.textTertiary },
+  albumsMore: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  // 可点的「更多」是有效正文，不能用低对比 decorative 色
+  albumsMoreText: { ...textVariants.footnote, color: colors.textSecondary },
   albumsRetry: {
     alignSelf: 'flex-start',
     paddingVertical: spacing[2],
@@ -346,9 +383,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
   albumCoverFallback: { justifyContent: 'center', alignItems: 'center' },
-  albumName: { ...textVariants.caption, color: colors.textTertiary, marginTop: 6 },
-  radioMeta: { ...textVariants.caption, color: colors.textTertiary, marginTop: 2 },
+  // 专辑名/主播名是有效 meta：textSecondary；textTertiary 只留占位图标
+  albumName: { ...textVariants.caption, color: colors.textSecondary, marginTop: spacing[1] },
+  radioMeta: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   avatarFallback: { color: colors.textInverse, fontSize: 56, fontWeight: typography.weights.bold },
-  empty: { paddingVertical: 60, alignItems: 'center' },
+  empty: { paddingVertical: spacing[12], alignItems: 'center' },
   emptyText: { ...textVariants.callout, color: colors.textSecondary },
+  retryBtn: {
+    marginTop: spacing[3],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
+  },
+  retryText: { ...textVariants.footnote, color: colors.accent },
+  footerRetry: { alignItems: 'center', paddingVertical: spacing[4] },
+  footerRetryText: { ...textVariants.footnote, color: colors.accent },
 });

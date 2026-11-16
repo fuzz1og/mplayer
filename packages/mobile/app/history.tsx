@@ -1,6 +1,6 @@
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongList from '../components/SongList';
 import type { SongListRow } from '../components/SongList';
@@ -60,7 +60,13 @@ export default function HistoryPage() {
           headerShadowVisible: false,
         }} />
         {history.length === 0 ? (
-          <EmptyState icon={Clock} title="还没有播放记录" />
+          <EmptyState
+            icon={Clock}
+            title="还没有播放记录"
+            subtitle="播放任意歌曲后会出现在这里"
+            actionLabel="去发现音乐"
+            onAction={() => router.replace('/')}
+          />
         ) : (
           <SongList
             rows={rows}

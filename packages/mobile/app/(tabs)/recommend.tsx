@@ -18,7 +18,7 @@ import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from '../../components/reco
 import ScalePress, { pressScale } from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { spacing, textVariants } from '../../theme/tokens';
+import { opacity, spacing, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -77,22 +77,26 @@ export default function RecommendPage() {
     load(true);
   };
 
+  // 当前展示的 5 首(随机批次;池不足 5 首时直接展示整个池)
+  const shownSongs = batch;
+  // 池子不超过一批时没有「换一批」的语义：禁用而不是点了没反应
+  const canShuffle = songs.length > RECOMMEND_BATCH_SIZE;
+
   const handlePlayAll = () => {
-    if (songs.length === 0) return;
-    usePlayerStore.getState().setQueue(songs, 0);
-    playSong(songs[0]);
+    // 只把**当前可见批次**入队：此前把 100 首随机池全塞进队列，用户以为「播放全部」只播 5 首，
+    // 实际下一首会跳到池里从未展示过的歌。
+    if (shownSongs.length === 0) return;
+    usePlayerStore.getState().setQueue(shownSongs, 0);
+    playSong(shownSongs[0]);
   };
 
   // 换一批:从大池子随机抽 5 首(本轮不重复,抽完一轮自动重置)
   const handleShuffle = () => {
-    if (songs.length <= 5) return;
+    if (!canShuffle) return;
     const { batch: nextBatch, used } = pickRandomBatch(songs, usedIndices, RECOMMEND_BATCH_SIZE);
     setBatch(nextBatch);
     setUsedIndices(used);
   };
-
-  // 当前展示的 5 首(随机批次;池不足 5 首时直接展示整个池)
-  const shownSongs = batch;
 
   // #186 #6：整页加载改为就地骨架，避免居中转圈→列表的布局跳动
   if (loading) return <RecommendSkeleton />;
@@ -126,13 +130,25 @@ export default function RecommendPage() {
               <Text style={styles.sectionTitle}>今日推荐</Text>
               {songs.length > 0 && (
                 <View style={styles.headerActions}>
-                  <ScalePress onPress={handlePlayAll} style={styles.headerAction} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
+                  <ScalePress
+                    onPress={handlePlayAll}
+                    style={styles.headerAction}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                    accessibilityLabel="播放全部（当前推荐）"
+                  >
                     <Play size={15} color={colors.accent} />
                     <Text style={[styles.headerActionText, { color: colors.accent }]}>播放全部</Text>
                   </ScalePress>
-                  <ScalePress onPress={handleShuffle} style={styles.headerAction} hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}>
-                    <RefreshCw size={15} color={colors.textSecondary} />
-                    <Text style={[styles.headerActionText, { color: colors.textSecondary }]}>换一批</Text>
+                  <ScalePress
+                    onPress={handleShuffle}
+                    style={[styles.headerAction, !canShuffle && { opacity: opacity.disabled }]}
+                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
+                    disabled={!canShuffle}
+                    accessibilityLabel="换一批推荐"
+                    accessibilityState={{ disabled: !canShuffle }}
+                  >
+                    <RefreshCw size={15} color={canShuffle ? colors.textSecondary : colors.textDisabled} />
+                    <Text style={[styles.headerActionText, { color: canShuffle ? colors.textSecondary : colors.textDisabled }]}>换一批</Text>
                   </ScalePress>
                 </View>
               )}
@@ -187,18 +203,18 @@ export default function RecommendPage() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
-  content: { paddingBottom: 32 },
+  content: { paddingBottom: spacing[8] },
   section: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
   sectionHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
-    marginBottom: 8,
+    marginBottom: spacing[2],
   },
   headerActions: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 8,
+    gap: spacing[2],
   },
   sectionTitle: {
     ...textVariants.sectionHeader,
@@ -208,16 +224,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   headerAction: {
     flexDirection: 'row',
     alignItems: 'center',
-    gap: 4,
+    gap: spacing[1],
     paddingVertical: spacing[1],
   },
   headerActionText: { ...textVariants.footnote, fontWeight: '600' },
-  emptyText: { ...textVariants.footnote, color: colors.textSecondary, marginVertical: 20, textAlign: 'center' },
+  emptyText: { ...textVariants.footnote, color: colors.textSecondary, marginVertical: spacing[5], textAlign: 'center' },
   errorBox: {
     alignItems: 'center',
     paddingTop: 80,
   },
-  errorText: { ...textVariants.subhead, fontWeight: '400', color: colors.danger, marginTop: 10 },
+  errorText: { ...textVariants.subhead, fontWeight: '400', color: colors.dangerText, marginTop: spacing[3] },
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',

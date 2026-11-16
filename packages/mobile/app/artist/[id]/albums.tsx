@@ -231,7 +231,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cardMeta: {
     ...textVariants.micro,
-    color: colors.textTertiary,
+    // 曲目数是有效 meta，用 textSecondary
+    color: colors.textSecondary,
     marginTop: GRID_CARD.metaGap,
     minHeight: GRID_CARD.metaLineHeight,
   },
@@ -243,11 +244,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: spacing[3],
   },
   yearText: { ...textVariants.titleLg, color: colors.textPrimary, fontWeight: typography.weights.bold },
-  yearCount: { ...textVariants.footnote, color: colors.textTertiary },
+  yearCount: { ...textVariants.footnote, color: colors.textSecondary },
   footer: { marginVertical: spacing[5] },
   footerText: {
     ...textVariants.footnote,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginVertical: spacing[5],
   },

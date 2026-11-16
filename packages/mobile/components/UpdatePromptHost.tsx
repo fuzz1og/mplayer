@@ -89,6 +89,7 @@ export default function UpdatePromptHost() {
             style={styles.closeBtn}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             onPress={handleDismiss}
+            accessibilityLabel="关闭更新提示"
           >
             <X size={18} color={colors.textTertiary} />
           </ScalePress>

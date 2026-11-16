@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { View, Text, Animated, StyleSheet, type StyleProp, type ViewStyle } from 'react-native';
-import { radius, shadow, textVariants } from '../theme/tokens';
+import { radius, shadow, spacing, textVariants } from '../theme/tokens';
 import { lightColors, darkColors } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -16,7 +16,8 @@ import ScalePress from './ScalePress';
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   track: {
     flexDirection: 'row',
-    backgroundColor: colors.bgActive,
+    // iOS 13+ 分段控件统一材质（与设置页 AppearanceSection 同一套）：极浅轨道 + 浮起滑块
+    backgroundColor: colors.segmentTrack,
     borderRadius: radius.sm,
     padding: 2,
   },
@@ -31,7 +32,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   item: {
     flex: 1,
-    paddingVertical: 8,
+    paddingVertical: spacing[2],
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -87,11 +88,21 @@ export default function SegmentedTabs({ tabs, activeIndex, onSelect, style }: {
           style={[styles.thumb, { width: segW, transform: [{ translateX: thumbX }] }]}
         />
       )}
-      {tabs.map((t, i) => (
-        <ScalePress key={t.key} style={styles.item} onPress={() => onSelect(i)}>
-          <Text style={[styles.label, activeIndex === i && styles.labelActive]}>{t.label}</Text>
-        </ScalePress>
-      ))}
+      {tabs.map((t, i) => {
+        const active = activeIndex === i;
+        return (
+          <ScalePress
+            key={t.key}
+            style={styles.item}
+            onPress={() => onSelect(i)}
+            accessibilityRole="tab"
+            accessibilityLabel={t.label}
+            accessibilityState={{ selected: active }}
+          >
+            <Text style={[styles.label, active && styles.labelActive]}>{t.label}</Text>
+          </ScalePress>
+        );
+      })}
     </View>
   );
 }

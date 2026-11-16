@@ -25,7 +25,7 @@ import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { downloadSong } from '../../services/downloadService';
 import type { ThemeColors } from '../../theme/tokens';
-import { spacing, textVariants } from '../../theme/tokens';
+import { radius, spacing, textVariants } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
 const PAGE_SIZE = 30;
@@ -100,8 +100,11 @@ export default function DjRadioDetailPage() {
     return () => { cancelled = true; };
   }, [id, reloadKey]);
 
-  const loadMore = useCallback(async () => {
+  const loadMore = useCallback(async (force = false) => {
     if (!id || !more || loadingMore) return;
+    // 分页失败后 onEndReached 会反复触发；只有页脚重试（force）才重新发请求
+    if (programsError && !force) return;
+    if (force) setProgramsError('');
     setLoadingMore(true);
     try {
       const page = await getDjRadioProgramsRouted('netease', id, programs.length, PAGE_SIZE);
@@ -118,7 +121,7 @@ export default function DjRadioDetailPage() {
     } finally {
       setLoadingMore(false);
     }
-  }, [id, loadingMore, more, programs.length]);
+  }, [id, loadingMore, more, programs.length, programsError]);
 
   const guardAll = useCallback(() => {
     if (allBusyRef.current) return false;
@@ -209,7 +212,8 @@ export default function DjRadioDetailPage() {
       style={styles.navAction}
       onPress={() => void downloadAll()}
       disabled={downloading || playingAll}
-      hitSlop={{ left: 8, right: 8, top: 8, bottom: 8 }}
+      hitSlop={{ left: 4, right: 4, top: 4, bottom: 4 }}
+      accessibilityLabel="下载全部节目"
     >
       <Download size={22} color={colors.textSecondary} />
     </ScalePress>
@@ -235,7 +239,19 @@ export default function DjRadioDetailPage() {
           renderItem={renderItem}
           onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={more} hasData={programs.length > 0} />}
+          ListFooterComponent={
+            programs.length > 0 && programsError ? (
+              <ScalePress
+                style={styles.footerRetry}
+                onPress={() => void loadMore(true)}
+                accessibilityLabel="节目加载失败，点此重试"
+              >
+                <Text style={styles.retryText}>加载失败，点此重试</Text>
+              </ScalePress>
+            ) : (
+              <LoadMoreFooter loadingMore={loadingMore} hasMore={more} hasData={programs.length > 0} />
+            )
+          }
           ListEmptyComponent={
             loading ? (
               <SongListSkeleton rows={6} showSource={false} />
@@ -267,7 +283,16 @@ export default function DjRadioDetailPage() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   flex: { flex: 1 },
-  navAction: { marginRight: spacing[2] },
-  retry: { alignSelf: 'center', marginTop: spacing[4], paddingHorizontal: spacing[5], paddingVertical: spacing[2], borderRadius: 999, backgroundColor: colors.bgHover },
+  // 图标钮在 CollapsingHero 的 navRight 胶囊内，不再额外留右距
+  navAction: { alignItems: 'center', justifyContent: 'center' },
+  retry: {
+    alignSelf: 'center',
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
+  },
   retryText: { ...textVariants.footnote, color: colors.accent },
+  footerRetry: { alignItems: 'center', paddingVertical: spacing[4] },
 });

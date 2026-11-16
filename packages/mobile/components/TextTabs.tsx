@@ -21,9 +21,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing[1],
   },
   item: {
+    minHeight: 44,
     paddingHorizontal: spacing[3],
     paddingVertical: spacing[2],
     alignItems: 'center',
+    justifyContent: 'center',
   },
   /* 固定行形态：各项 flex 等分满宽（iOS 分段式等分，非横滑形态专用） */
   itemFixed: {
@@ -68,7 +70,14 @@ export default function TextTabs({ tabs, activeKey, onSelect, scrollable = true 
   const items = tabs.map((t) => {
     const active = t.key === activeKey;
     return (
-      <ScalePress key={t.key} style={[styles.item, !scrollable && styles.itemFixed]} onPress={() => onSelect(t.key)}>
+      <ScalePress
+        key={t.key}
+        style={[styles.item, !scrollable && styles.itemFixed]}
+        onPress={() => onSelect(t.key)}
+        accessibilityRole="tab"
+        accessibilityLabel={t.label}
+        accessibilityState={{ selected: active }}
+      >
         <Text style={[styles.label, active && styles.labelActive]}>{t.label}</Text>
         <View style={[styles.underline, active && styles.underlineActive]} />
       </ScalePress>

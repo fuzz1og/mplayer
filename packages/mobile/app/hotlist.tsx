@@ -7,6 +7,7 @@ import {
   TextInput,
   Alert,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -228,7 +229,8 @@ export default function HotlistPage() {
               style={styles.navAction}
               onPress={openSaveSheet}
               disabled={songs.length === 0}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              accessibilityLabel="保存全部到新歌单"
             >
               <Download size={22} color={colors.textPrimary} />
             </ScalePress>
@@ -248,6 +250,7 @@ export default function HotlistPage() {
 
       {/* 保存全部到新歌单（#493）：确认弹层写清榜单名与曲目数，名称可改 */}
       <BottomSheet visible={saveVisible} onClose={closeSaveSheet}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.saveBody}>
           <Text style={styles.saveTitle}>保存全部到新歌单</Text>
           <Text style={styles.saveSub}>
@@ -262,11 +265,13 @@ export default function HotlistPage() {
             returnKeyType="done"
             onSubmitEditing={handleSaveAll}
             autoCorrect={false}
+            accessibilityLabel="新歌单名称"
           />
           <View style={styles.saveActions}>
             <ScalePress
               style={styles.saveCancel}
               onPress={closeSaveSheet}
+              accessibilityLabel="取消保存"
             >
               <Text style={styles.saveCancelText}>取消</Text>
             </ScalePress>
@@ -274,6 +279,7 @@ export default function HotlistPage() {
               style={[styles.saveConfirm, (!saveName.trim() || saving) && { opacity: opacity.disabled }]}
               onPress={handleSaveAll}
               disabled={!saveName.trim() || saving}
+              accessibilityLabel={`保存 ${songs.length} 首到新歌单`}
             >
               {saving
                 ? <Loader2 size={18} color={colors.textInverse} />
@@ -281,6 +287,7 @@ export default function HotlistPage() {
             </ScalePress>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </BottomSheet>
       <BottomSafePlayerBar />
     </View>
@@ -327,7 +334,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveCancel: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -339,7 +346,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveConfirm: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.accent,
     alignItems: 'center',

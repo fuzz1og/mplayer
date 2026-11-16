@@ -12,13 +12,16 @@ import {
   TextInput,
   Alert,
   Animated,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { ListMusic, ChevronRight, Plus, Heart, Clock } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import type { Playlist } from '../../stores/playlistStore';
 import { usePlayerStore } from '../../stores/playerStore';
-import {opacity, radius, textVariants} from '../../theme/tokens';
+import {opacity, radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
@@ -49,12 +52,17 @@ export default function PlaylistsPage() {
   const [newName, setNewName] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
 
+  const closeCreateModal = () => {
+    Keyboard.dismiss();
+    setNewName('');
+    setModalVisible(false);
+  };
+
   const handleCreate = () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
     createPlaylist(trimmed);
-    setNewName('');
-    setModalVisible(false);
+    closeCreateModal();
   };
 
   const handleDelete = (item: Playlist) => {
@@ -70,6 +78,7 @@ export default function PlaylistsPage() {
       pressScaleTo={pressScale.row}
       onPress={() => router.push(`/playlist/${item.id}`)}
       onLongPress={() => handleDelete(item)}
+      accessibilityHint="长按删除歌单"
     >
       <View style={styles.iconWrap}>
         <ListMusic size={24} color={colors.accent} />
@@ -98,12 +107,15 @@ export default function PlaylistsPage() {
         ]}
         ListHeaderComponent={() => (
           <>
-            {/* 页头随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住 */}
+            {/* 页头随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住。
+                用紧凑标题（17/700）：发现页移除可见页头后，各 tab 不再在内容区重复大页名。 */}
             <View style={styles.header}>
-              <Text style={styles.title}>我的歌单</Text>
+              <Text style={styles.title} accessibilityRole="header">我的歌单</Text>
               <ScalePress
                 style={styles.addBtn}
                 onPress={() => setModalVisible(true)}
+                hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+                accessibilityLabel="新建歌单"
               >
                 <Plus size={24} color={colors.textInverse} />
               </ScalePress>
@@ -126,8 +138,8 @@ export default function PlaylistsPage() {
               </ScalePress>
             ))}
             {playlists.length > 0 && (
-              <View style={{ paddingHorizontal: 16, paddingVertical: 8 }}>
-                <Text style={{ ...textVariants.footnote, color: colors.textSecondary }}>我的歌单</Text>
+              <View style={styles.groupHeader}>
+                <Text style={styles.groupLabel} accessibilityRole="header">自建歌单</Text>
               </View>
             )}
           </>
@@ -140,50 +152,57 @@ export default function PlaylistsPage() {
         animationType="fade"
         statusBarTranslucent
         navigationBarTranslucent
-        onRequestClose={() => setModalVisible(false)}
+        onRequestClose={closeCreateModal}
       >
         {/* 遮罩/内容拦截器保持无动画语义（PR #260 判例）：不应有视觉反馈 */}
         <Pressable
           style={styles.modalOverlay}
-          onPress={() => setModalVisible(false)}
+          onPress={closeCreateModal}
         >
-          <Pressable
-            style={styles.modalContent}
-            onPress={() => {}}
+          <KeyboardAvoidingView
+            behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+            style={styles.modalKav}
           >
-            <Text style={styles.modalTitle}>新建歌单</Text>
-            <TextInput
-              style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
-              placeholder="输入歌单名称"
-              placeholderTextColor={colors.inputPlaceholder}
-              value={newName}
-              onChangeText={setNewName}
-              onFocus={() => setInputFocused(true)}
-              onBlur={() => setInputFocused(false)}
-              autoFocus
-            />
-            <View style={styles.modalActions}>
-              <ScalePress
-                style={styles.cancelBtn}
-                onPress={() => {
-                  setNewName('');
-                  setModalVisible(false);
-                }}
-              >
-                <Text style={styles.cancelText}>取消</Text>
-              </ScalePress>
-              <ScalePress
-                style={[
-                  styles.confirmBtn,
-                  !newName.trim() && { opacity: opacity.disabled },
-                ]}
-                onPress={handleCreate}
-                disabled={!newName.trim()}
-              >
-                <Text style={styles.confirmText}>创建</Text>
-              </ScalePress>
-            </View>
-          </Pressable>
+            <Pressable
+              style={styles.modalContent}
+              onPress={() => {}}
+            >
+              <Text style={styles.modalTitle}>新建歌单</Text>
+              <TextInput
+                style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
+                placeholder="输入歌单名称"
+                placeholderTextColor={colors.inputPlaceholder}
+                value={newName}
+                onChangeText={setNewName}
+                onFocus={() => setInputFocused(true)}
+                onBlur={() => setInputFocused(false)}
+                autoFocus
+                returnKeyType="done"
+                onSubmitEditing={handleCreate}
+                accessibilityLabel="新歌单名称"
+              />
+              <View style={styles.modalActions}>
+                <ScalePress
+                  style={styles.cancelBtn}
+                  onPress={closeCreateModal}
+                  accessibilityLabel="取消新建歌单"
+                >
+                  <Text style={styles.cancelText}>取消</Text>
+                </ScalePress>
+                <ScalePress
+                  style={[
+                    styles.confirmBtn,
+                    !newName.trim() && { opacity: opacity.disabled },
+                  ]}
+                  onPress={handleCreate}
+                  disabled={!newName.trim()}
+                  accessibilityLabel="创建歌单"
+                >
+                  <Text style={styles.confirmText}>创建</Text>
+                </ScalePress>
+              </View>
+            </Pressable>
+          </KeyboardAvoidingView>
         </Pressable>
       </Modal>
     </Animated.View>
@@ -197,11 +216,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 12,
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[3],
+    paddingBottom: spacing[3],
   },
-  title: { ...textVariants.largeTitle, color: colors.textPrimary },
+  // 紧凑标题：组标签已承担层级，不再用 largeTitle 重复压一层页名
+  title: { ...textVariants.title, color: colors.textPrimary },
   addBtn: {
     width: 36,
     height: 36,
@@ -210,14 +230,20 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'center',
   },
-  list: { paddingBottom: 100 },
+  groupHeader: {
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[2],
+  },
+  groupLabel: { ...textVariants.footnote, fontWeight: '600', color: colors.textSecondary },
+  // 底部让位由 contentContainerStyle 的 bottomChromeHeight 统一注入
+  list: {},
 
   // rows
   row: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
@@ -228,11 +254,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     backgroundColor: colors.bgHover,
     alignItems: 'center',
     justifyContent: 'center',
-    marginRight: 12,
+    marginRight: spacing[3],
   },
   rowInfo: { flex: 1 },
   rowName: { ...textVariants.body, color: colors.textPrimary },
-  rowMeta: { ...textVariants.caption, color: colors.textSecondary, marginTop: 3 },
+  rowMeta: { ...textVariants.caption, color: colors.textSecondary, marginTop: spacing[1] },
 
   // modal
   modalOverlay: {
@@ -241,17 +267,21 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalKav: {
+    width: '100%',
+    alignItems: 'center',
+  },
   modalContent: {
     backgroundColor: colors.bgSurface,
     borderRadius: radius.lg,
-    padding: 24,
+    padding: spacing[6],
     width: '80%',
   },
   modalTitle: {
     ...textVariants.title,
     fontWeight: '600',
     color: colors.textPrimary,
-    marginBottom: 16,
+    marginBottom: spacing[4],
     textAlign: 'center',
   },
   modalInput: {
@@ -261,8 +291,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.md,
     borderWidth: 1,
     borderColor: colors.inputBorder,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
     color: colors.textPrimary,
   },
   modalInputFocused: {
@@ -270,12 +300,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   modalActions: {
     flexDirection: 'row',
-    marginTop: 20,
-    gap: 12,
+    marginTop: spacing[5],
+    gap: spacing[3],
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -283,7 +313,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cancelText: { ...textVariants.body, fontWeight: '400', color: colors.textSecondary },
   confirmBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.accent,
     alignItems: 'center',

@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, memo, type ComponentRef, type ComponentType, type ReactNode } from 'react';
 import {
   View, Text, StyleSheet, FlatList, ScrollView,
-  Animated, Alert, useWindowDimensions, Easing,
+  Animated, Alert, BackHandler, useWindowDimensions, Easing,
 } from 'react-native';
 import type { NativeSyntheticEvent, NativeScrollEvent, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -429,6 +429,18 @@ export default function PlayerOverlay({ onClose }: Props) {
     }).start();
   };
 
+  // Android 硬件返回 = 关闭全屏播放器（与下滑手势同一退场动画）。
+  // ref 持有最新 dismiss，避免 effect 随每次渲染重挂监听。
+  const dismissRef = useRef(dismiss);
+  dismissRef.current = dismiss;
+  useEffect(() => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+      dismissRef.current();
+      return true;
+    });
+    return () => sub.remove();
+  }, []);
+
   // ── 竖直下拉关闭（ADR-0004）：可中断、速度继承、动量投影、橡皮筋全部收在 gestures/dragSession
   // （与 BottomSheet 共用同一实现），这里只提供实时面板尺寸、认领阈值、纵向优先开关（封面页）与退场
   // 编排。
@@ -457,7 +469,14 @@ export default function PlayerOverlay({ onClose }: Props) {
   if (!song) return null;
 
   return (
-    <SafeAreaView style={styles.container} edges={['top']} {...panHandlers}>
+    <SafeAreaView
+      style={styles.container}
+      edges={['top']}
+      {...panHandlers}
+      // 全屏媒体覆盖层：读屏把下层页面视为不可达，VoiceOver 双指 Z 手势可关闭
+      accessibilityViewIsModal
+      onAccessibilityEscape={() => dismiss()}
+    >
       <StatusBar style={isDark ? 'light' : 'dark'} />
       {/* 歌词高亮同步器（渲染 null）：currentTime 订阅下沉点，心跳不打全树 */}
       <LyricSyncer
@@ -489,20 +508,41 @@ export default function PlayerOverlay({ onClose }: Props) {
       ]}>
         {/* 自定义顶部栏（与背景一体：透明无毛玻璃，图标亮色；iOS 全屏沉浸，真机反馈） */}
         <View style={styles.customHeader}>
-          <ScalePress onPress={() => dismiss()} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
+          <ScalePress
+            onPress={() => dismiss()}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}
+            accessibilityLabel="收起播放器"
+          >
             <ChevronDown size={28} color={fg.icon} />
           </ScalePress>
           {/* #186 #9：词/封切换改图标对，当前态 accent 高亮；唱片视图在左、歌词视图在右
               （真机反馈：与「封面页在左 / 歌词页在右」的页面顺序对位） */}
           <View style={styles.toggleGroup}>
-            <ScalePress onPress={() => { setShowLyrics(false); animateToPage(false); }} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+            <ScalePress
+              onPress={() => { setShowLyrics(false); animateToPage(false); }}
+              style={styles.toggleBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              accessibilityLabel="封面"
+              accessibilityState={{ selected: !showLyrics }}
+            >
               <Disc3 size={22} color={showLyrics ? fg.icon : colors.accent} />
             </ScalePress>
-            <ScalePress onPress={() => { setShowLyrics(true); animateToPage(true); }} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+            <ScalePress
+              onPress={() => { setShowLyrics(true); animateToPage(true); }}
+              style={styles.toggleBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              accessibilityLabel="歌词"
+              accessibilityState={{ selected: showLyrics }}
+            >
               <MessageSquareText size={22} color={showLyrics ? colors.accent : fg.icon} />
             </ScalePress>
             {/* 更多操作（真机反馈：竖排三点图标，加歌单/下载收进弹层） */}
-            <ScalePress onPress={() => setShowMoreModal(true)} style={styles.toggleBtn} hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}>
+            <ScalePress
+              onPress={() => setShowMoreModal(true)}
+              style={styles.toggleBtn}
+              hitSlop={{ top: 10, bottom: 10, left: 6, right: 6 }}
+              accessibilityLabel="更多操作"
+            >
               <MoreVertical size={22} color={fg.icon} />
             </ScalePress>
           </View>
@@ -560,7 +600,13 @@ export default function PlayerOverlay({ onClose }: Props) {
                     <Text style={styles.sourceTagText}>{SOURCE_LABELS[song.sourceType] || song.sourceType}</Text>
                   </View>
                 )}
-                <ScalePress onPress={toggleFavorite} style={styles.infoFav} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+                <ScalePress
+                  onPress={toggleFavorite}
+                  style={styles.infoFav}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  accessibilityLabel={isFav ? '取消收藏' : '收藏'}
+                  accessibilityState={{ selected: isFav }}
+                >
                   {/* P1-4：收藏切换即时 pop 反馈 */}
                   <Animated.View style={{ transform: [{ scale: favPop }] }}>
                     <Heart size={22} color={isFav ? colors.accent : fg.iconSoft} fill={isFav ? colors.accent : 'none'} />
@@ -639,26 +685,50 @@ export default function PlayerOverlay({ onClose }: Props) {
             {/* 控制按钮（真机反馈：循环模式最左、队列最右，与播放三键构成五件布局；
                 原底部操作行合并至此，腾出空间给唱盘） */}
             <View style={styles.controls}>
-              <ScalePress onPress={cyclePlayMode} style={styles.actionBtn} hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}>
+              <ScalePress
+                onPress={cyclePlayMode}
+                style={styles.actionBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                accessibilityLabel={`播放模式：${playMode}`}
+                accessibilityHint="切换播放模式"
+              >
                 {/* P1-4：循环模式切换即时 pop 反馈 */}
                 <Animated.View style={{ transform: [{ scale: modePop }] }}>
                   <ModeIcon size={24} color={colors.accent} />
                 </Animated.View>
               </ScalePress>
-              <ScalePress onPress={handlePrev} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
+              <ScalePress
+                onPress={handlePrev}
+                hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}
+                accessibilityLabel="上一首"
+              >
                 <SkipBack size={26} color={fg.icon} />
               </ScalePress>
-              <ScalePress onPress={() => { tapLight(); togglePlay(); }} style={styles.playBtn} pressScaleTo={0.95}>
+              <ScalePress
+                onPress={() => { tapLight(); togglePlay(); }}
+                style={styles.playBtn}
+                pressScaleTo={0.95}
+                accessibilityLabel={isPlaying ? '暂停' : '播放'}
+              >
                 {isPlaying ? (
                   <CirclePause size={56} color={colors.accent} />
                 ) : (
                   <CirclePlay size={56} color={colors.accent} />
                 )}
               </ScalePress>
-              <ScalePress onPress={handleNext} hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}>
+              <ScalePress
+                onPress={handleNext}
+                hitSlop={{ top: 10, bottom: 10, left: 16, right: 16 }}
+                accessibilityLabel="下一首"
+              >
                 <SkipForward size={26} color={fg.icon} />
               </ScalePress>
-              <ScalePress onPress={() => setShowQueueModal(true)} style={styles.actionBtn} hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}>
+              <ScalePress
+                onPress={() => setShowQueueModal(true)}
+                style={styles.actionBtn}
+                hitSlop={{ top: 10, bottom: 10, left: 4, right: 4 }}
+                accessibilityLabel="播放队列"
+              >
                 <ListMusic size={24} color={fg.icon} />
               </ScalePress>
             </View>
@@ -742,15 +812,27 @@ export default function PlayerOverlay({ onClose }: Props) {
       <BottomSheet visible={showMoreModal} onClose={() => setShowMoreModal(false)}>
         <View style={styles.moreHeader}>
           <Text style={styles.moreTitle}>更多</Text>
-          <ScalePress onPress={() => setShowMoreModal(false)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+          <ScalePress
+            onPress={() => setShowMoreModal(false)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            accessibilityLabel="关闭更多操作"
+          >
             <X size={22} color={colors.textSecondary} />
           </ScalePress>
         </View>
-        <ScalePress style={styles.moreItem} onPress={() => { setShowPlaylistModal(true); setShowMoreModal(false); }}>
+        <ScalePress
+          style={styles.moreItem}
+          onPress={() => { setShowPlaylistModal(true); setShowMoreModal(false); }}
+          accessibilityLabel="添加到歌单"
+        >
           <CirclePlus size={20} color={colors.textSecondary} />
           <Text style={styles.moreItemText}>添加到歌单</Text>
         </ScalePress>
-        <ScalePress style={styles.moreItem} onPress={() => { handleDownload(); setShowMoreModal(false); }}>
+        <ScalePress
+          style={styles.moreItem}
+          onPress={() => { handleDownload(); setShowMoreModal(false); }}
+          accessibilityLabel="下载"
+        >
           <Download size={20} color={colors.textSecondary} />
           <Text style={styles.moreItemText}>下载</Text>
         </ScalePress>
@@ -1031,7 +1113,7 @@ const makeStyles = (colors: ThemeColors, fg: PlayerFg) => StyleSheet.create({
   infoText: { flex: 1, alignItems: 'flex-start' },
   // 前景色随背景明暗切换（fg）：暗背景→亮字 / 浅背景→深字
   title: { ...textVariants.titleLg, color: fg.primary },
-  artist: { ...textVariants.footnote, color: fg.secondary, marginTop: 4 },
+  artist: { ...textVariants.footnote, color: fg.secondary, marginTop: spacing[1] },
   // 来源徽标移到收藏按钮左侧（真机反馈：右侧不空）
   infoFav: { marginLeft: spacing[2], padding: spacing[1] },
   sourceTag: {
@@ -1044,7 +1126,7 @@ const makeStyles = (colors: ThemeColors, fg: PlayerFg) => StyleSheet.create({
   sourceTagText: { ...textVariants.micro, color: fg.badgeText },
   progressWrap: { marginTop: spacing[4], alignItems: 'center' },
   // 宽度由 JSX 注入 sliderWidth(winW)（#186 #4 旋转/折叠屏实时）
-  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: 4 },
+  timeRow: { flexDirection: 'row', justifyContent: 'space-between', marginTop: spacing[1] },
   time: { ...textVariants.caption, color: fg.tertiary, fontVariant: ['tabular-nums'] },
   controls: {
     flexDirection: 'row',

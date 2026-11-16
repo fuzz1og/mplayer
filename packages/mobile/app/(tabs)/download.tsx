@@ -1,5 +1,6 @@
-import { View, Text, StyleSheet, FlatList, Alert, Animated } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Alert, Animated, Platform } from 'react-native';
 import { memo, useCallback, useEffect, useMemo } from 'react';
+import { router } from 'expo-router';
 import { Download, Trash2, ChevronRight } from 'lucide-react-native';
 import { Paths } from 'expo-file-system';
 import type { Song } from '@mplayer/core';
@@ -25,6 +26,9 @@ const STATUS_LABELS: Record<string, string> = {
   done: '已下载',
   error: '失败',
 };
+
+/** 路径展示用等宽字体：iOS 用 Menlo，Android 用系统 monospace（RN 不认 'monospace' 于 iOS） */
+const MONO_FONT = Platform.select({ ios: 'Menlo', android: 'monospace', default: undefined });
 
 export default function DownloadPage() {
   const { colors } = useTheme();
@@ -113,7 +117,9 @@ export default function DownloadPage() {
           <EmptyState
             icon={Download}
             title="暂无下载任务"
-            subtitle="在歌曲更多菜单中点击「下载」"
+            subtitle="在歌曲更多菜单中点击「下载」，或先去搜索想听的歌"
+            actionLabel="去搜索歌曲"
+            onAction={() => router.push('/search')}
           />
         }
         renderItem={({ item }) => (
@@ -176,8 +182,12 @@ const DownloadRow = memo(function DownloadRow({
             : STATUS_LABELS[item.status]}
         </Text>
         {item.status === 'done' && (
-          <ScalePress onPress={() => onRemove(item)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
-            <Trash2 size={18} color={colors.textTertiary} />
+          <ScalePress
+            onPress={() => onRemove(item)}
+            style={styles.deleteBtn}
+            accessibilityLabel={`删除下载：《${item.name}》`}
+          >
+            <Trash2 size={18} color={colors.textSecondary} />
           </ScalePress>
         )}
       </View>
@@ -209,9 +219,10 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingVertical: spacing[3],
   },
   pathInfo: { flex: 1, marginRight: spacing[2] },
-  pathLabel: { ...textVariants.caption, color: colors.textSecondary, marginBottom: 4 },
-  pathText: { ...textVariants.caption, color: colors.textTertiary, fontFamily: 'monospace' },
-  pathHint: { ...textVariants.micro, fontWeight: '400', color: colors.textTertiary, marginTop: 4 },
+  pathLabel: { ...textVariants.caption, color: colors.textSecondary, marginBottom: spacing[1] },
+  // 有效 meta：路径/提示是用户要读的信息，用 textSecondary（tertiary 只留装饰）
+  pathText: { ...textVariants.caption, color: colors.textSecondary, fontFamily: MONO_FONT },
+  pathHint: { ...textVariants.micro, fontWeight: '400', color: colors.textSecondary, marginTop: spacing[1] },
   /* 列表行（对齐 SongRow 惯例） */
   row: {
     backgroundColor: colors.bgSurface,
@@ -222,7 +233,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   rowMain: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
   },
   coverWrap: {
     width: 44,
@@ -239,7 +250,15 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   nameActive: { color: colors.accent },
   artist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   status: { ...textVariants.caption, color: colors.textSecondary, marginRight: spacing[3], fontVariant: ['tabular-nums'] },
-  statusError: { color: colors.danger },
+  // 语义色当文字走 dangerText（ADR-0006）
+  statusError: { color: colors.dangerText },
+  // 删除热区 ≥44（与封面同高，不额外撑高行）
+  deleteBtn: {
+    width: 44,
+    height: 44,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   progressTrack: {
     height: 2,
     borderRadius: 1,

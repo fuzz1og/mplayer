@@ -142,6 +142,9 @@ function SongRow({
   };
 
   const sourceKey = song.sourceType as SourceKey;
+  const sourceName = SOURCE_LABELS[sourceKey] || sourceKey;
+  /** 读屏名：歌名 + 歌手 + 来源；电台单期简介作为补充信息追加。 */
+  const baseLabel = `${song.name}，${song.artist}，${sourceName}`;
 
   return (
     <ScalePress
@@ -149,7 +152,9 @@ function SongRow({
       pressScaleTo={0.98}
       onPress={handlePress}
       onLongPress={onLongPress}
-      accessibilityLabel={description ? `${song.name}，${description}` : song.name}
+      accessibilityLabel={description ? `${baseLabel}，${description}` : baseLabel}
+      accessibilityHint={selectionMode ? '双击切换选中' : onLongPress ? '双击播放，长按进入选择模式' : '双击播放'}
+      accessibilityState={selectionMode ? { selected } : undefined}
     >
       {/* 选择模式：#490 勾选圈占榜位同槽位；未选中是空心圈，选中填 accent */}
       {selectionMode && (
@@ -203,6 +208,8 @@ function SongRow({
             onPress={handleFavorite}
             style={styles.favoriteBtn}
             hitSlop={{ top: 12, bottom: 12, left: 12, right: 4 }}
+            accessibilityLabel={`${favorited ? '取消收藏' : '收藏'}《${song.name}》`}
+            accessibilityState={{ selected: favorited }}
           >
             <Heart
               size={SONG_ROW.actionIconSize}
@@ -210,7 +217,12 @@ function SongRow({
               fill={favorited ? colors.accent : 'none'}
             />
           </ScalePress>
-          <ScalePress onPress={handleMore} style={styles.moreBtn} hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}>
+          <ScalePress
+            onPress={handleMore}
+            style={styles.moreBtn}
+            hitSlop={{ top: 12, bottom: 12, left: 8, right: 8 }}
+            accessibilityLabel={`更多操作：《${song.name}》`}
+          >
             <EllipsisVertical size={SONG_ROW.actionIconSizeCompact} color={colors.textTertiary} />
           </ScalePress>
         </>

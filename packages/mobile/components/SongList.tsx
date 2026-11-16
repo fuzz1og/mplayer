@@ -166,6 +166,8 @@ export default function SongList({
       getItemLayout={ListHeaderComponent ? undefined : getItemLayout}
       {...listWindowProps}
       contentContainerStyle={contentContainerStyle}
+      // 搜索/输入场景下点结果行不应先吃掉一次触摸（收起键盘）
+      keyboardShouldPersistTaps="handled"
       ListHeaderComponent={ListHeaderComponent ?? undefined}
       ListFooterComponent={ListFooterComponent ?? undefined}
       ListEmptyComponent={ListEmptyComponent ?? undefined}
@@ -187,7 +189,7 @@ const SectionHeaderRow = memo(function SectionHeaderRow({
 }) {
   return (
     <View style={styles.sectionHeader}>
-      <Text style={styles.sectionHeaderTitle}>{row.title}</Text>
+      <Text style={styles.sectionHeaderTitle} accessibilityRole="header">{row.title}</Text>
       {row.action && (
         <ScalePress onPress={row.action.onPress} style={styles.sectionHeaderAction}>
           <Text style={row.action.danger ? styles.sectionActionDanger : styles.sectionAction}>
@@ -207,7 +209,7 @@ const GroupHeaderRow = memo(function GroupHeaderRow({
   styles: ReturnType<typeof makeStyles>;
 }) {
   return (
-    <Text style={row.quiet ? styles.groupHeaderQuiet : styles.groupHeader}>
+    <Text style={row.quiet ? styles.groupHeaderQuiet : styles.groupHeader} accessibilityRole="header">
       {row.title}
       {row.subtitle ? <Text style={styles.groupArtist}> — {row.subtitle}</Text> : null}
       {row.note ? <Text style={styles.groupNote}>· {row.note}</Text> : null}
@@ -245,6 +247,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing[3],
     paddingBottom: 4,
   },
-  groupArtist: { ...textVariants.caption, color: colors.textTertiary },
-  groupNote: { ...textVariants.caption, color: colors.textTertiary },
+  // 有效 meta（歌手/版本数）用 textSecondary；textTertiary 只留给装饰
+  groupArtist: { ...textVariants.caption, color: colors.textSecondary },
+  groupNote: { ...textVariants.caption, color: colors.textSecondary },
 });

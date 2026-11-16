@@ -6,7 +6,7 @@ import { ArrowLeft, Search, Settings, ChevronDown, Check, LayoutGrid, Music2 } f
 import type { LucideIcon } from 'lucide-react-native';
 import { router, usePathname } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import {radius, textVariants} from '../theme/tokens';
+import {radius, spacing, textVariants} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { useSourceStore, SOURCE_OPTION_LABELS } from '../stores/sourceStore';
@@ -66,6 +66,7 @@ export default function TopBar() {
           onPress={() => router.replace('/')}
           style={styles.backBtn}
           hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+          accessibilityLabel="返回"
         >
           <ArrowLeft size={22} color={colors.textSecondary} />
         </ScalePress>
@@ -73,11 +74,12 @@ export default function TopBar() {
       <View style={[styles.searchBar, focused && styles.searchBarFocused]}>
         {/* 焦点光环用独立 overlay 实现：改父视图 elevation/shadow 会让 Android 聚焦中的 EditText 失焦 */}
         {focused && <View pointerEvents="none" style={styles.focusRing} />}
-        <Search size={18} color={focused ? colors.accent : colors.textTertiary} style={{ marginRight: 8 }} />
+        <Search size={18} color={focused ? colors.accent : colors.textTertiary} style={{ marginRight: spacing[2] }} />
         <TextInput
           style={styles.input}
           placeholder="搜索歌曲..."
           placeholderTextColor={colors.inputPlaceholder}
+          accessibilityLabel="搜索歌曲"
           value={searchText}
           onChangeText={setSearchText}
           onSubmitEditing={handleSubmit}
@@ -96,7 +98,12 @@ export default function TopBar() {
           }}
           onBlur={() => setFocused(false)}
         />
-        <ScalePress onPress={() => setShowSourcePicker(true)} style={styles.sourceBtn}>
+        <ScalePress
+          onPress={() => setShowSourcePicker(true)}
+          style={styles.sourceBtn}
+          accessibilityLabel={`选择音乐源，当前 ${SOURCE_OPTION_LABELS[selectedSource]}`}
+          accessibilityHint="打开音乐源选择面板"
+        >
           <SourceBadge source={selectedSource} size="sm" />
           <Text style={styles.sourceLabel}>{SOURCE_OPTION_LABELS[selectedSource]}</Text>
           <ChevronDown size={12} color={colors.textSecondary} />
@@ -106,6 +113,7 @@ export default function TopBar() {
         onPress={() => router.push('/settings')}
         style={styles.settingsBtn}
         hitSlop={{ top: 12, bottom: 12, left: 12, right: 12 }}
+        accessibilityLabel="设置"
       >
         <Settings size={22} color={colors.textSecondary} />
       </ScalePress>
@@ -118,6 +126,9 @@ export default function TopBar() {
             pressScaleTo={0.98}
             style={[styles.optionItem, selectedSource === opt.key && { backgroundColor: colors.bgHover, borderRadius: radius.md }]}
             onPress={() => handleSelectSource(opt.key)}
+            accessibilityRole="radio"
+            accessibilityLabel={SOURCE_OPTION_LABELS[opt.key]}
+            accessibilityState={{ selected: selectedSource === opt.key }}
           >
             {/* 源身份只经 6px 徽章点表达（源色纪律）；文字/图标保持中性色保对比度 */}
             <SourceBadge source={opt.key} size="md" style={styles.optionDot} />
@@ -133,7 +144,7 @@ export default function TopBar() {
             )}
           </ScalePress>
         ))}
-        <ScalePress style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)}>
+        <ScalePress style={styles.cancelBtn} onPress={() => setShowSourcePicker(false)} accessibilityLabel="取消选择音乐源">
           <Text style={styles.cancelText}>取消</Text>
         </ScalePress>
       </BottomSheet>
@@ -145,7 +156,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     paddingVertical: TOP_BAR_PAD_VERTICAL,
     // paddingTop 由组件按 insets.top 动态注入（写死 52 在无刘海机型空一大截）
     // 悬浮 chrome：毛玻璃材质由 ChromeSurface 提供（ADR-0005），此处透明
@@ -157,7 +168,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.inputBg,
     borderRadius: radius.full,
-    paddingHorizontal: 12,
+    paddingHorizontal: spacing[3],
     height: SEARCH_BAR_HEIGHT,
   },
   searchBarFocused: {
@@ -191,13 +202,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     alignItems: 'center',
     backgroundColor: colors.bgHover,
     borderRadius: radius.full,
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    marginLeft: 6,
-    gap: 4,
+    paddingHorizontal: spacing[2] + 2,
+    paddingVertical: spacing[1],
+    marginLeft: spacing[1] + 2,
+    gap: spacing[1],
   },
   optionDot: {
-    marginRight: 12,
+    marginRight: spacing[3],
   },
   sourceLabel: {
     ...textVariants.caption,
@@ -205,36 +216,36 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     color: colors.textPrimary,
   },
   settingsBtn: {
-    marginLeft: 12,
-    padding: 4,
+    marginLeft: spacing[3],
+    padding: spacing[1],
   },
   backBtn: {
-    padding: 4,
-    marginRight: 8,
+    padding: spacing[1],
+    marginRight: spacing[2],
   },
   sheetTitle: {
     ...textVariants.title,
     color: colors.textPrimary,
     textAlign: 'center',
-    marginBottom: 16,
+    marginBottom: spacing[4],
   },
   optionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 8,
+    paddingVertical: spacing[3],
+    paddingHorizontal: spacing[2],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
   optionLabel: {
     ...textVariants.callout,
     color: colors.textPrimary,
-    marginLeft: 12,
+    marginLeft: spacing[3],
     flex: 1,
   },
   cancelBtn: {
-    marginTop: 12,
-    paddingVertical: 14,
+    marginTop: spacing[3],
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',

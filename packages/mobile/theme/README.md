@@ -22,22 +22,38 @@ function Foo() {
 - 状态栏图标色：浅色主题 `'dark'`、深色主题 `'light'`，即 `style={isDark ? 'light' : 'dark'}`。
 - 多子组件共享一套大样式表的例外模式：模块级预构建两份（参考 `components/DiscoverTabs.tsx` 的 `STYLES`），组件内按 `isDark` 取用。
 
+## 视觉方向：A×C（2026-11-16）
+
+发现页改版确立、其余屏只对齐 token 的基线，详见 `docs/specs/2026-11-16-mobile-discover-visual-refresh.md`。
+
+| 角色 | 深色 | 浅色 |
+|---|---|---|
+| 页面底 | `palette.indigo950` `#0F0F23` | `palette.paper` `#F4F1EA` |
+| 卡片/面 | `palette.indigo900` `#1B1B30` | `bgSurface` `#FFFFFF` |
+| 交互色 | `palette.signal400` `#FFB86B` | `palette.rust600` `#9A3412` |
+| 主文字 | `#F7F8FC` | `palette.ink900` `#1B1B2A` |
+
+- 琥珀/锈色只用于激活态、播放键、进度与少数强调；图标默认 `textSecondary`/`textPrimary`，不做彩色图标墙。
+- `textTertiary` 是装饰/占位语义（`themeContrast.test.ts` 有断言），有效 meta（歌手、时长、名次）用 `textSecondary`。
+- 禁止在滚动内容、列表行、全屏背景上用实时 `BlurView`/`backdrop-filter`；封面氛围光用静态渐变 + 一次性取色。
+- 图像/封面上固定用 `playerForeground.dark` 前景 + 固定深色遮罩，不随主题翻转。
+
 ## 文字变体（#175）
 
 Text 样式一律用语义变体，禁止裸写 `fontSize`/`fontWeight` 魔法数：
 
 | 变体 | 值 | 用途 |
 |---|---|---|
-| `largeTitle` | 22/700 | 页面大标题 |
-| `titleLg` | 20/700 | 全屏播放器歌曲名 |
-| `title` | 17/700 | 弹层/对话框标题 |
-| `sectionHeader` | 16/700 | 区块标题 |
+| `largeTitle` | 24/700 | 页面大标题 |
+| `titleLg` | 20/700 | 全屏播放器歌曲名 / 发现页 hero |
+| `title` | 17/700 | 弹层/对话框标题 / 页内标题 |
+| `sectionHeader` | 17/700 | 区块标题 |
 | `callout` | 16/400 | 正文级说明/空态文案 |
 | `body` | 15/500 | 列表主行文字 |
 | `subhead` | 14/500 | 次级行文字/输入框/tab 标签 |
 | `footnote` | 13/400 | 辅助说明/meta |
 | `caption` | 12/400 | 副行文字（歌手名/时间） |
-| `micro` | 11/600 | 徽章/角标 |
+| `micro` | 10/600 | 徽章/角标 |
 
 用法（makeStyles 工厂内展开，weight 特例在展开后覆盖）：
 
@@ -64,11 +80,11 @@ playAllText: { ...textVariants.caption, fontWeight: '600', color: colors.textInv
 | `--shadow-xs … xl` | `shadow.xs … shadow.xl` | RN 单层近似 |
 | `--text-2xs … 3xl` | `typography.sizes['2xs'] … ['3xl']` | 10 … 28 |
 | `--weight-*` | `typography.weights.*` | 400/500/600/700 |
-| `--bg-base/surface/elevated/sidebar/player` | `colors.bgBase/bgSurface/bgElevated/bgSidebar/bgPlayer` | 浅色层级 |
-| `--bg-hover/active/overlay` | `colors.bgHover/bgActive/bgOverlay` | `#F5F5F7` / `#E8E8ED` / `rgba(0,0,0,.4)` |
-| `--text-primary/secondary/tertiary/disabled/inverse/link` | `colors.textPrimary … textLink` | gray900/600/400/300/白/blue600 |
-| `--border-default/subtle/strong` | `colors.borderDefault/borderSubtle/borderStrong` | gray200/100/300 |
-| `--accent/-hover/-active/-subtle/-text` | `colors.accent … accentText` | blue500/600/700/50/600 |
+| `--bg-base/surface/elevated/sidebar/player` | `colors.bgBase/bgSurface/bgElevated/bgSidebar/bgPlayer` | `#F4F1EA` / `#FFFFFF` / `#FBF8F2` / `#FFFFFF` / 半透明白 |
+| `--bg-hover/active/overlay` | `colors.bgHover/bgActive/bgOverlay` | `#ECE7DD` / `#E3DDD1` / `rgba(15,15,35,.42)` |
+| `--text-primary/secondary/tertiary/disabled/inverse/link` | `colors.textPrimary … textLink` | `#1B1B2A` / `#5E6272` / gray400（仅装饰）/ `#C9C3B8` / 白 / rust700 |
+| `--border-default/subtle/strong` | `colors.borderDefault/borderSubtle/borderStrong` | ink900 的 12% / 7% / 20% |
+| `--accent/-hover/-active/-subtle/-text` | `colors.accent … accentText` | rust600/700/800 + 10% 底 / rust700 |
 | `--danger* / --warning* / --success` | `colors.danger* / warning* / success` | 红/琥珀/翠绿 |
 | `--input-*` | `colors.inputBg … inputPlaceholder` | 输入框状态 |
 | `--skeleton-base/shine` | `colors.skeletonBase/skeletonShine` | gray100/200 |

@@ -240,7 +240,7 @@ export default function SearchPage() {
         ) : error && results.length === 0 ? (
           <View style={styles.emptyContainer}>
             <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.danger }]}>{error}</Text>
+            <Text style={[styles.emptyText, { color: colors.dangerText }]}>{error}</Text>
           </View>
         ) : results.length > 0 ? (
           // 多源/单源分开渲染:全部源按歌分组(同歌各源合并),单源按源分组
@@ -261,7 +261,7 @@ export default function SearchPage() {
         ) : djradiosError ? (
           <View style={styles.emptyContainer}>
             <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.danger }]}>{djradiosError}</Text>
+            <Text style={[styles.emptyText, { color: colors.dangerText }]}>{djradiosError}</Text>
             <ScalePress style={styles.retryButton} onPress={() => void searchDjradios(q, true)}>
               <Text style={styles.retryText}>重试</Text>
             </ScalePress>
@@ -272,6 +272,7 @@ export default function SearchPage() {
             data={djradios}
             keyExtractor={(item) => item.id}
             {...listWindowProps}
+            keyboardShouldPersistTaps="handled"
             numColumns={2}
             columnWrapperStyle={styles.playlistRow}
             contentContainerStyle={[
@@ -311,7 +312,7 @@ export default function SearchPage() {
         ) : playlistsError ? (
           <View style={styles.emptyContainer}>
             <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.danger }]}>歌单搜索失败</Text>
+            <Text style={[styles.emptyText, { color: colors.dangerText }]}>歌单搜索失败</Text>
             <ScalePress style={styles.retryButton} onPress={() => void searchPlaylists(q, true)}>
               <Text style={styles.retryText}>重试</Text>
             </ScalePress>
@@ -323,6 +324,7 @@ export default function SearchPage() {
             keyExtractor={(item) => String(item.id)}
             // 窗口档与其它长列表同源（#411）
             {...listWindowProps}
+            keyboardShouldPersistTaps="handled"
             numColumns={2}
             columnWrapperStyle={styles.playlistRow}
             contentContainerStyle={[
@@ -378,7 +380,7 @@ export default function SearchPage() {
       ) : artistsError ? (
         <View style={styles.emptyContainer}>
           <CircleAlert size={48} color={colors.danger} />
-          <Text style={[styles.emptyText, { color: colors.danger }]}>歌手搜索失败</Text>
+          <Text style={[styles.emptyText, { color: colors.dangerText }]}>歌手搜索失败</Text>
         </View>
       ) : artists.length > 0 ? (
         <FlatList
@@ -387,6 +389,7 @@ export default function SearchPage() {
           keyExtractor={(item) => String(item.id)}
           // 窗口档与其它长列表同源（#411）
           {...listWindowProps}
+          keyboardShouldPersistTaps="handled"
           numColumns={3}
           columnWrapperStyle={styles.artistRow}
           contentContainerStyle={[
@@ -508,7 +511,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: 12 },
+  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: spacing[3] },
   retryButton: {
     marginTop: spacing[4],
     paddingHorizontal: spacing[5],
