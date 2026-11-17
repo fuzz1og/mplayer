@@ -23,6 +23,7 @@ vi.mock('lucide-react-native', () => {
     CircleX: Icon,
     Trash2: Icon,
     Plus: Icon,
+    ChevronRight: Icon,
     Gauge: Icon,
     Share2: Icon,
   };
@@ -31,6 +32,14 @@ vi.mock('lucide-react-native', () => {
 vi.mock('expo-constants', () => ({ default: { expoConfig: { version: '9.9.9' } } }));
 
 vi.mock('expo-router', () => ({ Stack: { Screen: () => null } }));
+
+vi.mock('expo-file-system', () => ({
+  Paths: { document: { uri: 'file:///test/' } },
+}));
+
+vi.mock('../services/downloadService', () => ({
+  pickDownloadDirectory: vi.fn(async () => true),
+}));
 
 vi.mock('../hooks/useReducedMotion', () => ({ useReducedMotion: () => false }));
 
@@ -60,6 +69,7 @@ vi.mock('../services/appUpdate', () => ({
 import { useSettingsStore } from '../stores/settingsStore';
 import AppearanceSection from '../components/settings/AppearanceSection';
 import PlaybackSection from '../components/settings/PlaybackSection';
+import DownloadSettingsSection from '../components/settings/DownloadSettingsSection';
 import DirectStatusSection from '../components/settings/DirectStatusSection';
 import Tier3Section from '../components/settings/Tier3Section';
 import DeveloperModeSection from '../components/settings/DeveloperModeSection';
@@ -76,6 +86,7 @@ import * as appUpdate from '../services/appUpdate';
 const SECTIONS: { name: string; node: ReactNode; text: string }[] = [
   { name: 'AppearanceSection', node: <AppearanceSection />, text: '跟随系统' },
   { name: 'PlaybackSection', node: <PlaybackSection />, text: '失败即跳' },
+  { name: 'DownloadSettingsSection', node: <DownloadSettingsSection />, text: '保存位置' },
   { name: 'DirectStatusSection', node: <DirectStatusSection />, text: '直连状态' },
   { name: 'Tier3Section', node: <Tier3Section />, text: '添加 URL 订阅' },
   { name: 'DeveloperModeSection', node: <DeveloperModeSection />, text: '开发者模式' },
@@ -198,7 +209,7 @@ describe('设置页区段（#425）', () => {
     });
     const text = document.body.textContent ?? '';
     // 顺序即 settings.tsx 的区段顺序（#477 在 tier3 之后插了「开发者选项」，诊断区随开关显隐）
-    const labels = ['外观', '播放', '直连状态', '第三方解析源（tier3）', '开发者选项', '缓存管理', '关于'];
+    const labels = ['外观', '播放', '下载', '直连状态', '第三方解析源（tier3）', '开发者选项', '缓存管理', '关于'];
     let last = -1;
     for (const label of labels) {
       const at = text.indexOf(label);

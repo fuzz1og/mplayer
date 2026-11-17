@@ -19,7 +19,12 @@ export default function DeveloperModeSection() {
         <View style={styles.rowSwitch}>
           <Text style={[styles.modeLabel, { flex: 1 }]}>开发者模式</Text>
           <View style={styles.switchWrap}>
-            <Switch value={devMode} onValueChange={setDevMode} style={styles.switch} />
+            <Switch
+              value={devMode}
+              onValueChange={setDevMode}
+              style={styles.switch}
+              accessibilityLabel="开发者模式"
+            />
           </View>
         </View>
       </View>

@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TextInput, ScrollView } from 'react-native';
+import { View, Text, StyleSheet, TextInput, ScrollView, KeyboardAvoidingView, Platform } from 'react-native';
 import { Check, CircleCheck, Link2, Loader2 } from 'lucide-react-native';
 import { classifySong, importFromLink } from '@mplayer/core';
 import type { Song, ProgressState, ImportResult, PlaylistImportDeps } from '@mplayer/core';
@@ -138,6 +138,7 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
   return (
     <BottomSheet visible={visible} onClose={handleClose} maxHeightRatio={0.85}>
       {step === 'input' && (
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.body}>
           <Text style={styles.title}>导入歌单</Text>
           <Text style={styles.sub}>
@@ -161,6 +162,7 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
             <Text style={styles.primaryText}>解析链接</Text>
           </ScalePress>
         </View>
+        </KeyboardAvoidingView>
       )}
 
       {step === 'parsing' && (
@@ -183,7 +185,7 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
             </ScalePress>
           </View>
           {error && <Text style={styles.error}>{error}</Text>}
-          <ScrollView style={styles.list} nestedScrollEnabled>
+          <ScrollView style={styles.list} nestedScrollEnabled keyboardShouldPersistTaps="handled">
             {songs.map((song) => {
               const already = alreadyIn.has(song.id);
               const on = !already && selected.has(song.id);
@@ -197,7 +199,7 @@ export default function PlaylistImportSheet({ visible, playlistId, playlistName,
                     {on && <Check size={13} color={colors.textInverse} strokeWidth={3} />}
                   </View>
                   <View style={styles.meta}>
-                    <Text style={[styles.songName, already && { color: colors.textTertiary }]} numberOfLines={1}>
+                    <Text style={[styles.songName, already && { color: colors.textSecondary }]} numberOfLines={1}>
                       {song.name}
                     </Text>
                     <Text style={styles.songArtist} numberOfLines={1}>

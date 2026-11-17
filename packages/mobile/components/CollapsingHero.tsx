@@ -14,7 +14,6 @@ import {
   Animated,
 } from 'react-native';
 import type { FlatListProps, ListRenderItem, RefreshControlProps } from 'react-native';
-import { router } from 'expo-router';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Music2, Play, ArrowLeft } from 'lucide-react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -27,6 +26,7 @@ import { COVER_FOG_H } from './collapsingChrome';
 import { useCollapsingChrome } from '../hooks/useCollapsingChrome';
 import ScalePress from './ScalePress';
 import { listWindowProps } from './listWindow';
+import { goBackOrHome } from '../utils/navigation';
 
 /** 返回图标压在封面上的颜色（旧 color 插值起点色；深色主题下 textInverse 是深色，不能替代） */
 const BACK_ICON_ON_COVER = '#FFFFFF'; // design-lint: ok 折叠头部返回图标起点色：白
@@ -130,10 +130,12 @@ export default function CollapsingHero<T>({
   ListFooterComponent,
   ListEmptyComponent,
 }: CollapsingHeroProps<T>) {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const insets = useSafeAreaInsets();
   const { chrome, onScroll, navBg, fade, statusStyle } = useCollapsingChrome();
+  // 封面阶段恒用白字（封面明暗不可控）；折叠出实心导航栏后跟随主题
+  const statusBarStyle = statusStyle === 'light' ? 'light' : isDark ? 'light' : 'dark';
   const [coverFailed, setCoverFailed] = useState(false);
 
   useEffect(() => setCoverFailed(false), [cover]);
@@ -148,7 +150,8 @@ export default function CollapsingHero<T>({
 
   return (
     <View style={{ flex: 1 }}>
-      <StatusBar style={statusStyle} />
+      {/* 封面阶段白字（封面明暗不可控）；折叠后浅色页面深字 / 深色页面亮字 */}
+      <StatusBar style={statusBarStyle} />
 
       {/* 悬浮导航栏：顶部透明（盖在封面上）→ 下滑后实心正常标题栏 */}
       <Animated.View
@@ -157,7 +160,12 @@ export default function CollapsingHero<T>({
           { paddingTop: insets.top, height: chrome.navH + insets.top, backgroundColor: navBg },
         ]}
       >
-        <ScalePress style={styles.navBack} onPress={() => router.back()} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <ScalePress
+          style={styles.navBack}
+          onPress={goBackOrHome}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="返回"
+        >
           {/* 返回图标换色 = 两层同形图标叠加：底层恒为不透明白，上层 textPrimary 用
               原生驱动的 opacity 0→1 覆盖。合成色 = 白·(1-p) + textPrimary·p，
               与旧的 color 插值逐值相同，但颜色插值只在原生侧结算，不再每帧重建组件。 */}
@@ -171,8 +179,9 @@ export default function CollapsingHero<T>({
         <Animated.Text style={[styles.navTitle, { opacity: fade }]} numberOfLines={1}>
           {navTitle}
         </Animated.Text>
-        {/* 页面动作插槽（如歌单重命名铅笔）：原 headerShown:false 后 Stack headerRight 不渲染 */}
-        {navRight}
+        {/* 页面动作插槽（如歌单重命名铅笔）：原 headerShown:false 后 Stack headerRight 不渲染。
+            加可读胶囊底：动作图标压在封面亮部时仍可辨；折叠后与实心导航栏同材质。 */}
+        {navRight ? <View style={styles.navRightPill}>{navRight}</View> : null}
       </Animated.View>
 
       {/* 列表：封面是列表第一块内容（含状态栏区域），随滚动滚出屏幕。
@@ -187,6 +196,7 @@ export default function CollapsingHero<T>({
         {...listWindowProps}
         onScroll={onScroll}
         scrollEventThrottle={16}
+        keyboardShouldPersistTaps="handled"
         onEndReached={onEndReached}
         onEndReachedThreshold={onEndReachedThreshold}
         refreshControl={refreshControl}
@@ -296,6 +306,16 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.full,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  navRightPill: {
+    minWidth: 40,
+    height: 40,
+    borderRadius: radius.full,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: colors.bgSurface,
+    borderWidth: StyleSheet.hairlineWidth,
+    borderColor: colors.borderSubtle,
   },
   navTitle: {
     flex: 1,

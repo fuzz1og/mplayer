@@ -18,7 +18,12 @@ export default function PlaybackSection() {
         <View style={styles.rowSwitch}>
           <Text style={[styles.modeLabel, { flex: 1 }]}>失败即跳</Text>
           <View style={styles.switchWrap}>
-            <Switch value={autoSkipOnError} onValueChange={setAutoSkipOnError} style={styles.switch} />
+            <Switch
+              value={autoSkipOnError}
+              onValueChange={setAutoSkipOnError}
+              style={styles.switch}
+              accessibilityLabel="失败即跳"
+            />
           </View>
         </View>
       </View>

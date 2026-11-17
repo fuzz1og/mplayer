@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import {
-  View, Text, StyleSheet, Alert, TextInput, Platform,
+  View, Text, StyleSheet, Alert, TextInput, Platform, KeyboardAvoidingView,
 } from 'react-native';
 import { CircleCheck, ListMusic, Plus } from 'lucide-react-native';
 import type { Song, SourceKey } from '@mplayer/core';
@@ -165,6 +165,7 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
 
   return (
     <BottomSheet visible={visible} onClose={onClose}>
+      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
       {addedName ? (
         <View style={styles.successBox}>
           <CircleCheck size={48} color={colors.accent} />
@@ -194,6 +195,7 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
               returnKeyType="done"
               onSubmitEditing={handleCreateAndAdd}
               autoCorrect={false}
+              accessibilityLabel="新歌单名称"
             />
             <ScalePress
               style={[styles.createBtn, emptyName && styles.createBtnDisabled]}
@@ -234,6 +236,7 @@ export default function AddToPlaylistModal({ visible, song, songs, onClose }: Pr
           </ScalePress>
         </>
       )}
+      </KeyboardAvoidingView>
     </BottomSheet>
   );
 }
@@ -291,7 +294,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   item: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     paddingHorizontal: spacing[2],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
@@ -317,12 +320,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   emptyHint: {
     ...textVariants.footnote,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     marginTop: spacing[1],
   },
   cancelBtn: {
     marginTop: spacing[2],
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -337,7 +340,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderRadius: radius.lg,
     padding: spacing[8],
     alignItems: 'center',
-    marginBottom: 100,
+    marginBottom: spacing[12] * 2,
   },
   successText: {
     ...textVariants.sectionHeader,

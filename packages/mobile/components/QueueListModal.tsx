@@ -1,4 +1,4 @@
-import { memo, useCallback, useMemo } from 'react';
+import { memo, useCallback, useMemo, useRef } from 'react';
 import { FlatList, Text, View, StyleSheet } from 'react-native';
 import { X, Play } from 'lucide-react-native';
 import { spacing, textVariants } from '../theme/tokens';
@@ -46,6 +46,8 @@ const QueueRow = memo(function QueueRow({
       pressScaleTo={pressScale.row}
       // 真机反馈（#186）：点歌换歌不关闭弹层，由用户决定何时关闭
       onPress={() => onSelect(song)}
+      accessibilityLabel={`${song.name}，${song.artist}${isCurrent ? '，正在播放' : ''}`}
+      accessibilityState={{ selected: isCurrent }}
     >
       <View style={styles.itemInfo}>
         <Text style={[styles.itemName, isCurrent && styles.itemActive]} numberOfLines={1}>
@@ -120,15 +122,29 @@ export default function QueueListModal({ visible, onClose }: Props) {
     [colors.accent, currentSong?.id, handleSelect, styles],
   );
 
+  // 打开时直接定位当前曲（打开瞬间 FlatList 才挂载，initialScrollIndex 生效）。
+  // 用对象身份找下标：队列允许同一首歌出现多次，按 id 会永远落在第一份。
+  const currentIndex = useMemo(() => {
+    if (!currentSong) return -1;
+    const identity = rows.findIndex((row) => row.song === currentSong);
+    return identity >= 0 ? identity : rows.findIndex((row) => row.song.id === currentSong.id);
+  }, [rows, currentSong]);
+  const listRef = useRef<FlatList<{ song: Song; key: string }>>(null);
+
   return (
     <BottomSheet visible={visible} onClose={onClose}>
       <View style={styles.header}>
-        <Text style={styles.title}>播放队列 ({queue.length})</Text>
-        <ScalePress onPress={onClose} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}>
+        <Text style={styles.title} accessibilityRole="header">播放队列 ({queue.length})</Text>
+        <ScalePress
+          onPress={onClose}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          accessibilityLabel="关闭播放队列"
+        >
           <X size={24} color={colors.textSecondary} />
         </ScalePress>
       </View>
       <FlatList
+        ref={listRef}
         data={rows}
         keyExtractor={(row) => row.key}
         renderItem={renderItem}
@@ -140,6 +156,14 @@ export default function QueueListModal({ visible, onClose }: Props) {
           offset: QUEUE_ROW_HEIGHT * index,
           index,
         })}
+        // 有 getItemLayout 才给 initialScrollIndex；目标未测量失败时按固定行高兜底跳位
+        initialScrollIndex={currentIndex > 0 ? currentIndex : undefined}
+        onScrollToIndexFailed={({ index }) => {
+          listRef.current?.scrollToOffset({
+            offset: Math.max(0, index) * QUEUE_ROW_HEIGHT,
+            animated: false,
+          });
+        }}
         ListEmptyComponent={<Text style={styles.empty}>队列为空</Text>}
       />
     </BottomSheet>
@@ -163,7 +187,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderDefault,
   },
-  itemInfo: { flex: 1, marginRight: 12 },
+  itemInfo: { flex: 1, marginRight: spacing[3] },
   itemName: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
   itemActive: { color: colors.accent },
   itemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },

@@ -55,7 +55,7 @@ export default function UpdateAvailableInfo({
         <Text
           style={{
             ...textVariants.settingsTertiary,
-            color: colors.danger,
+            color: colors.dangerText,
             lineHeight: 20,
             marginBottom: spacing[3],
           }}

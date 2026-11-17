@@ -28,16 +28,16 @@ Text 样式一律用语义变体，禁止裸写 `fontSize`/`fontWeight` 魔法�
 
 | 变体 | 值 | 用途 |
 |---|---|---|
-| `largeTitle` | 22/700 | 页面大标题 |
+| `largeTitle` | 24/700 | 页面大标题 |
 | `titleLg` | 20/700 | 全屏播放器歌曲名 |
 | `title` | 17/700 | 弹层/对话框标题 |
-| `sectionHeader` | 16/700 | 区块标题 |
+| `sectionHeader` | 17/700 | 区块标题 |
 | `callout` | 16/400 | 正文级说明/空态文案 |
 | `body` | 15/500 | 列表主行文字 |
 | `subhead` | 14/500 | 次级行文字/输入框/tab 标签 |
 | `footnote` | 13/400 | 辅助说明/meta |
 | `caption` | 12/400 | 副行文字（歌手名/时间） |
-| `micro` | 11/600 | 徽章/角标 |
+| `micro` | 10/600 | 徽章/角标 |
 
 用法（makeStyles 工厂内展开，weight 特例在展开后覆盖）：
 

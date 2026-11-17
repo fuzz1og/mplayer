@@ -120,7 +120,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
@@ -131,7 +131,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   actionCancel: {
     marginTop: spacing[3],
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',

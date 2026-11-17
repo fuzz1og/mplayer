@@ -34,6 +34,11 @@ export default function DiscoverPlaylistDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  /** 首屏失败：与「歌单不存在」区分，给错误文案 + 重试 */
+  const [loadError, setLoadError] = useState(false);
+  /** 分页失败：页脚重试；失败后不再被 onEndReached 自动重试 */
+  const [moreError, setMoreError] = useState(false);
+  const [reloadKey, setReloadKey] = useState(0);
   const offsetRef = useRef(0);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
   const addSongs = usePlaylistStore((s) => s.addSongs);
@@ -45,9 +50,18 @@ export default function DiscoverPlaylistDetailPage() {
   const [exportConfirm, setExportConfirm] = useState<{ name: string; songs: Song[] } | null>(null);
 
   useEffect(() => {
-    if (!id) return;
+    if (!id) {
+      setLoading(false);
+      return;
+    }
     let cancelled = false;
     offsetRef.current = 0;
+    setLoading(true);
+    setLoadError(false);
+    setMoreError(false);
+    setPlaylist(null);
+    setSongs([]);
+    setHasMore(true);
     (async () => {
       try {
         // 元数据与第一页歌曲并行（weapi 直连，歌曲含已解析播放 URL）
@@ -68,15 +82,19 @@ export default function DiscoverPlaylistDetailPage() {
         });
       } catch (e: any) {
         console.error('[DiscoverPlaylistDetail] load error:', e.message);
+        if (!cancelled) setLoadError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, reloadKey]);
 
-  const loadMore = async () => {
+  const loadMore = async (force = false) => {
     if (loadingMore || !hasMore || !id) return;
+    // 失败后 onEndReached 会反复触发；必须由用户点页脚重试（force）
+    if (moreError && !force) return;
+    if (force) setMoreError(false);
     setLoadingMore(true);
     try {
       const page = await getDirectClient('netease')!.getPlaylistSongs!(Number(id), offsetRef.current, PAGE_SIZE);
@@ -93,6 +111,7 @@ export default function DiscoverPlaylistDetailPage() {
       }
     } catch (e: any) {
       console.error('[DiscoverPlaylistDetail] loadMore error:', e.message);
+      setMoreError(true);
     } finally {
       setLoadingMore(false);
     }
@@ -170,7 +189,16 @@ export default function DiscoverPlaylistDetailPage() {
             headerShadowVisible: false,
           }}
         />
-        <Text style={{ ...textVariants.callout, color: colors.textSecondary }}>歌单不存在</Text>
+        <Text style={styles.emptyText}>{loadError ? '歌单加载失败' : '歌单不存在'}</Text>
+        {loadError ? (
+          <ScalePress
+            style={styles.retryBtn}
+            onPress={() => setReloadKey((key) => key + 1)}
+            accessibilityLabel="重新加载歌单"
+          >
+            <Text style={styles.retryText}>重试</Text>
+          </ScalePress>
+        ) : null}
       </View>
     );
   }
@@ -186,7 +214,8 @@ export default function DiscoverPlaylistDetailPage() {
       style={styles.moreBtn}
       onPress={() => void handleExportToLocal()}
       disabled={exporting}
-      hitSlop={{ left: 8, right: 8, top: 8, bottom: 8 }}
+      hitSlop={{ left: 4, right: 4, top: 4, bottom: 4 }}
+      accessibilityLabel="导出到本地歌单"
     >
       <Download size={22} color={colors.textSecondary} />
     </ScalePress>
@@ -212,9 +241,28 @@ export default function DiscoverPlaylistDetailPage() {
           renderItem={({ item }) => (
             <SongRow song={item} showSource queueSongs={songs} onSwap={handleSwap} />
           )}
-          onEndReached={loadMore}
+          onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
+          ListFooterComponent={
+            moreError ? (
+              <View style={styles.footerCenter}>
+                <ScalePress
+                  style={styles.retryBtn}
+                  onPress={() => void loadMore(true)}
+                  accessibilityLabel="加载更多失败，点此重试"
+                >
+                  <Text style={styles.retryText}>加载更多失败，点此重试</Text>
+                </ScalePress>
+              </View>
+            ) : (
+              <LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />
+            )
+          }
+          ListEmptyComponent={
+            <View style={styles.songsEmpty}>
+              <Text style={styles.emptyText}>歌单暂无歌曲</Text>
+            </View>
+          }
         />
       </SafeAreaView>
       <BottomSafePlayerBar />
@@ -261,8 +309,20 @@ export default function DiscoverPlaylistDetailPage() {
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
   empty: { flex: 1, backgroundColor: colors.bgBase, justifyContent: 'center', alignItems: 'center' },
+  emptyText: { ...textVariants.callout, color: colors.textSecondary },
+  retryBtn: {
+    marginTop: spacing[4],
+    paddingHorizontal: spacing[5],
+    paddingVertical: spacing[2],
+    borderRadius: radius.full,
+    backgroundColor: colors.bgHover,
+  },
+  retryText: { ...textVariants.footnote, color: colors.accent },
+  footerCenter: { alignItems: 'center', paddingVertical: spacing[4] },
+  songsEmpty: { alignItems: 'center', paddingVertical: spacing[10] },
 
-  moreBtn: { marginRight: spacing[2] },
+  // 图标钮在 CollapsingHero 的 navRight 胶囊内，不再额外留右距
+  moreBtn: { alignItems: 'center', justifyContent: 'center' },
 
   // 导出确认弹窗（对齐本地歌单页的重命名弹窗样式）
   modalOverlay: {
@@ -288,7 +348,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   modalActions: { flexDirection: 'row', marginTop: spacing[5], gap: spacing[3] },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
     borderRadius: radius.sm,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -296,7 +356,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cancelText: { ...textVariants.body, fontWeight: '400', color: colors.textSecondary },
   confirmBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
     borderRadius: radius.sm,
     backgroundColor: colors.accent,
     alignItems: 'center',

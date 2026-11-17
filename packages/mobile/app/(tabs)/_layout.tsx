@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
+import { Compass, Flame, ListMusic } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -10,6 +10,7 @@ import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { TAB_LABEL_HEIGHT, TAB_PAD_BOTTOM, TAB_SAFE_INSET_MIN, tabBarHeight as chromeTabBarHeight } from '../../components/chromeMetrics';
+import { textVariants } from '../../theme/tokens';
 import TopBar from '../../components/TopBar';
 import PlayerBar from '../../components/PlayerBar';
 import ChromeSurface from '../../components/ChromeSurface';
@@ -22,7 +23,6 @@ const TABS: { name: string; href: Href; icon: LucideIcon; label: string }[] = [
   { name: 'recommend', href: '/recommend', icon: Flame, label: '推荐' },
   { name: 'index', href: '/', icon: Compass, label: '发现' },
   { name: 'playlists', href: '/playlists', icon: ListMusic, label: '歌单' },
-  { name: 'download', href: '/download', icon: Download, label: '本地歌曲' },
 ];
 
 /**
@@ -77,9 +77,23 @@ function BottomChrome() {
                 const isFocused = pathname === tab.href;
                 const Icon = tab.icon;
                 return (
-                  <ScalePress key={tab.name} onPress={() => router.navigate(tab.href)} pressScaleTo={0.95} style={tabBarStyles.tab}>
+                  <ScalePress
+                    key={tab.name}
+                    onPress={() => router.navigate(tab.href)}
+                    pressScaleTo={0.95}
+                    style={tabBarStyles.tab}
+                    accessibilityRole="tab"
+                    accessibilityLabel={tab.label}
+                    accessibilityState={{ selected: isFocused }}
+                  >
                     <Icon size={22} color={isFocused ? colors.accent : colors.textSecondary} />
-                    <Text style={[{ color: isFocused ? colors.accent : colors.textSecondary, fontSize: 11, marginTop: 2, lineHeight: TAB_LABEL_HEIGHT - 2 }]}>
+                    <Text
+                      style={[
+                        textVariants.micro,
+                        tabBarStyles.tabLabel,
+                        { color: isFocused ? colors.accent : colors.textSecondary },
+                      ]}
+                    >
                       {tab.label}
                     </Text>
                   </ScalePress>
@@ -113,7 +127,6 @@ export default function TabLayout() {
           <Tabs.Screen name="index" options={{ title: '发现' }} />
           <Tabs.Screen name="search" options={{ title: '搜索', href: null }} />
           <Tabs.Screen name="playlists" options={{ title: '歌单' }} />
-          <Tabs.Screen name="download" options={{ title: '本地歌曲' }} />
         </Tabs>
       </View>
       {/* 顶部 chrome 悬浮（M2）：内容从半透明 TopBar 下穿过 */}
@@ -162,5 +175,9 @@ const makeTabBarStyles = () => StyleSheet.create({
     flex: 1,
     alignItems: 'center',
     justifyContent: 'center',
+  },
+  tabLabel: {
+    marginTop: 2,
+    lineHeight: TAB_LABEL_HEIGHT - 2,
   },
 });

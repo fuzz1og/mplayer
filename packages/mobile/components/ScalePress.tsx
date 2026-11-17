@@ -5,6 +5,10 @@ import { springs } from '../theme/motion';
 import { opacity } from '../theme/tokens';
 import { useReducedMotion } from '../hooks/useReducedMotion';
 
+/** 减弱动效下的按压变暗时长：按下 80ms / 松开 160ms，只做瞬时确认、不常态压暗 */
+const REDUCED_PRESS_IN_MS = 80;
+const REDUCED_PRESS_OUT_MS = 160;
+
 /**
  * 按压幅度分档语义值（#233/#261 绞杀判例，防魔数散落）：
  * - 行/网格卡/大面板 → pressScale.row（0.98）
@@ -25,6 +29,10 @@ interface ScalePressProps {
   pressScaleTo?: number;
   hitSlop?: { top?: number; bottom?: number; left?: number; right?: number };
   accessibilityLabel?: ViewProps['accessibilityLabel'];
+  accessibilityHint?: ViewProps['accessibilityHint'];
+  accessibilityState?: ViewProps['accessibilityState'];
+  /** 默认 button；分段/文字 tabs 传 tab，列表行可传 button（默认即可） */
+  accessibilityRole?: ViewProps['accessibilityRole'];
   children: React.ReactNode;
 }
 
@@ -43,13 +51,25 @@ export default function ScalePress({
   pressScaleTo = 0.97,
   hitSlop,
   accessibilityLabel,
+  accessibilityHint,
+  accessibilityState,
+  accessibilityRole = 'button',
   children,
 }: ScalePressProps) {
   const scale = useRef(new Animated.Value(1)).current;
+  // 减弱动效的替代反馈：按下瞬间轻微变暗、松开即恢复（不再常态压到 0.75）
+  const dim = useRef(new Animated.Value(1)).current;
   const reducedMotion = useReducedMotion();
 
   const pressIn = () => {
-    if (reducedMotion) return;
+    if (reducedMotion) {
+      Animated.timing(dim, {
+        toValue: 0,
+        duration: REDUCED_PRESS_IN_MS,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
     Animated.spring(scale, {
       toValue: pressScaleTo,
       useNativeDriver: true,
@@ -57,12 +77,34 @@ export default function ScalePress({
     }).start();
   };
   const pressOut = () => {
+    if (reducedMotion) {
+      Animated.timing(dim, {
+        toValue: 1,
+        duration: REDUCED_PRESS_OUT_MS,
+        useNativeDriver: true,
+      }).start();
+      return;
+    }
     Animated.spring(scale, {
       toValue: 1,
       useNativeDriver: true,
       ...springs.pressScale,
     }).start();
   };
+
+  // 调用方可能用 style.opacity 表达禁用（如按钮 disabled 压暗）；减弱动效的按压缩放
+  // 必须叠在它的基准上而不是覆盖它。opacity 的类型是 AnimatableNumericValue，
+  // 这里只接受数值基准；动画值/百分比基准按 1 处理（本仓调用方只用数值）。
+  const rawOpacity = StyleSheet.flatten(style)?.opacity;
+  const baseOpacity = typeof rawOpacity === 'number' ? rawOpacity : 1;
+  const reducedStyle = reducedMotion
+    ? {
+        opacity: dim.interpolate({
+          inputRange: [0, 1],
+          outputRange: [baseOpacity * opacity.pressDim, baseOpacity],
+        }),
+      }
+    : null;
 
   return (
     <AnimatedPressable
@@ -72,15 +114,17 @@ export default function ScalePress({
       onPressOut={pressOut}
       disabled={disabled}
       hitSlop={hitSlop}
+      accessibilityRole={accessibilityRole}
       accessibilityLabel={accessibilityLabel}
-      style={[style, reducedMotion && styles.reducedDim, { transform: [{ scale }] }]}
+      accessibilityHint={accessibilityHint}
+      accessibilityState={
+        accessibilityState || disabled
+          ? { ...accessibilityState, disabled: disabled || accessibilityState?.disabled }
+          : undefined
+      }
+      style={[style, reducedStyle, { transform: [{ scale }] }]}
     >
       {children}
     </AnimatedPressable>
   );
 }
-
-const styles = StyleSheet.create({
-  // 减弱动效下的非前庭替代反馈：轻微降不透明度（保留"按到了"的确认感）
-  reducedDim: { opacity: opacity.pressDim },
-});

@@ -110,7 +110,12 @@ export default function Tier3Section() {
           {/* iOS Switch 高度 31pt：Android Material Switch 默认 48dp 会撑高 cell 行高。
               transform scale 只改视觉不改布局占位，必须用 switchWrap 固定 31 高度收敛占位 */}
           <View style={styles.switchWrap}>
-            <Switch value={tier3Enabled} onValueChange={handleTier3Toggle} style={styles.switch} />
+            <Switch
+              value={tier3Enabled}
+              onValueChange={handleTier3Toggle}
+              style={styles.switch}
+              accessibilityLabel="启用第三方解析"
+            />
           </View>
         </View>
         {/* iOS 表单惯例：输入 cell + 下方居中「添加」整行按钮（紧贴成块） */}
@@ -165,14 +170,24 @@ export default function Tier3Section() {
                 <Text style={{ ...textVariants.settingsPrimary, fontWeight: '500', color: colors.textPrimary }}>{sub.name}</Text>
                 {/* iOS cell 副标题 15pt（settingsSecondary）/ 三级信息 13pt（settingsTertiary） */}
                 <Text style={{ ...textVariants.settingsSecondary, color: colors.textSecondary }} numberOfLines={1}>{sub.source}</Text>
-                <Text style={{ ...textVariants.settingsTertiary, color: colors.textTertiary }}>{sub.manifest.sources.length} 个源</Text>
+                <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>{sub.manifest.sources.length} 个源</Text>
               </View>
               {sub.kind === 'url' && (
-                <ScalePress onPress={() => void handleRefreshTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
+                <ScalePress
+                  onPress={() => void handleRefreshTier3(sub.id)}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ padding: 6 }}
+                  accessibilityLabel={`刷新订阅 ${sub.name}`}
+                >
                   <RefreshCw size={16} color={colors.textSecondary} />
                 </ScalePress>
               )}
-              <ScalePress onPress={() => handleRemoveTier3(sub.id)} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 6 }}>
+              <ScalePress
+                onPress={() => handleRemoveTier3(sub.id)}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                style={{ padding: 6 }}
+                accessibilityLabel={`删除订阅 ${sub.name}`}
+              >
                 <Trash2 size={16} color={colors.danger} />
               </ScalePress>
             </View>
@@ -187,10 +202,20 @@ export default function Tier3Section() {
             <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between' }}>
               <Text style={{ ...textVariants.settingsTertiary, color: colors.textSecondary }}>每源解析统计（本次会话）· 健康度只调整遍历顺序</Text>
               <View style={{ flexDirection: 'row' }}>
-                <ScalePress onPress={refreshTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                <ScalePress
+                  onPress={refreshTier3Stats}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ padding: 4 }}
+                  accessibilityLabel="刷新解析统计"
+                >
                   <RefreshCw size={14} color={colors.textSecondary} />
                 </ScalePress>
-                <ScalePress onPress={handleClearTier3Stats} hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }} style={{ padding: 4 }}>
+                <ScalePress
+                  onPress={handleClearTier3Stats}
+                  hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                  style={{ padding: 4 }}
+                  accessibilityLabel="清空解析统计"
+                >
                   <Trash2 size={14} color={colors.textSecondary} />
                 </ScalePress>
               </View>

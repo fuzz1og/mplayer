@@ -22,7 +22,7 @@ import {
   buildAlbumTimeline,
   type AlbumTimelineItem,
 } from '../../../components/albumTimeline';
-import { radius, spacing, textVariants, typography } from '../../../theme/tokens';
+import { spacing, textVariants, typography } from '../../../theme/tokens';
 import type { ThemeColors } from '../../../theme/tokens';
 import { useTheme } from '../../../theme/ThemeProvider';
 
@@ -168,13 +168,11 @@ export default function ArtistAlbumsPage() {
         {header}
         <EmptyState
           icon={ImageOff}
+          iconColor={colors.dangerText}
           title="专辑加载失败"
           subtitle="稍后重试"
-          action={(
-            <ScalePress style={styles.retryBtn} onPress={() => setReloadKey((k) => k + 1)}>
-              <Text style={styles.retryText}>重试</Text>
-            </ScalePress>
-          )}
+          actionLabel="重试"
+          onAction={() => setReloadKey((k) => k + 1)}
         />
       </View>
     );
@@ -231,7 +229,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cardMeta: {
     ...textVariants.micro,
-    color: colors.textTertiary,
+    // 曲目数是有效 meta，用 textSecondary
+    color: colors.textSecondary,
     marginTop: GRID_CARD.metaGap,
     minHeight: GRID_CARD.metaLineHeight,
   },
@@ -243,21 +242,14 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: spacing[3],
   },
   yearText: { ...textVariants.titleLg, color: colors.textPrimary, fontWeight: typography.weights.bold },
-  yearCount: { ...textVariants.footnote, color: colors.textTertiary },
+  yearCount: { ...textVariants.footnote, color: colors.textSecondary },
   footer: { marginVertical: spacing[5] },
   footerText: {
     ...textVariants.footnote,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     textAlign: 'center',
     marginVertical: spacing[5],
   },
   footerRetry: { alignSelf: 'center', paddingVertical: spacing[3], paddingHorizontal: spacing[4] },
   footerRetryText: { ...textVariants.footnote, color: colors.accent },
-  retryBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-  },
-  retryText: { ...textVariants.callout, color: colors.textInverse, fontWeight: typography.weights.semibold },
 });
