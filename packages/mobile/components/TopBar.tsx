@@ -45,8 +45,14 @@ export default function TopBar() {
   // 避免 TopBar 挂在 Tabs 外读不到深层路由参数。
   const storeQuery = useSearchStore((s) => s.query);
   useEffect(() => {
+    // 搜索词只属于搜索页：离开后恢复占位，避免 tab 页顶部残留上一次查询。
+    if (!isSearchTab) {
+      setSearchText('');
+      setFocused(false);
+      return;
+    }
     if (storeQuery && storeQuery !== searchText) setSearchText(storeQuery);
-  }, [storeQuery]);
+  }, [storeQuery, isSearchTab]);
 
   const handleSubmit = () => {
     const trimmed = searchText.trim();
