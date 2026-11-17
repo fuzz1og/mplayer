@@ -10,7 +10,7 @@ import {
 import ScalePress from '../../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { ChevronRight, Disc3, Radio } from 'lucide-react-native';
+import { ChevronRight, CircleAlert, Disc3, Music2, Radio } from 'lucide-react-native';
 import {
   getArtistInfoRouted,
   getArtistRadiosRouted,
@@ -25,6 +25,8 @@ import LoadMoreFooter from '../../../components/LoadMoreFooter';
 import SongRow from '../../../components/SongRow';
 import CollapsingHero from '../../../components/CollapsingHero';
 import LazyCover from '../../../components/LazyCover';
+import EmptyState from '../../../components/EmptyState';
+import InlineError from '../../../components/InlineError';
 import BottomSafePlayerBar from '../../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { playSong } from '../../../services/audioPlayer';
@@ -247,9 +249,7 @@ export default function ArtistDetailPage() {
         ) : null}
       </View>
       {albumsError ? (
-        <ScalePress style={styles.albumsRetry} onPress={() => setAlbumReloadKey(k => k + 1)}>
-          <Text style={styles.albumsRetryText}>加载失败，点此重试</Text>
-        </ScalePress>
+        <InlineError message="专辑加载失败" onRetry={() => setAlbumReloadKey(k => k + 1)} />
       ) : albums.length === 0 ? null : (
         // 横向 FlatList：只挂可视窗口附近的卡，不再一次把 100 张全挂上（#496）。
         // 不能给 getItemLayout —— 卡片高度随字号/主题变，算错比不给更糟。
@@ -281,9 +281,7 @@ export default function ArtistDetailPage() {
       ) : radiosError ? (
         <View style={styles.radiosSection}>
           <Text style={styles.albumsTitle}>电台</Text>
-          <ScalePress style={styles.albumsRetry} onPress={() => setRadiosReloadKey((key) => key + 1)}>
-            <Text style={styles.albumsRetryText}>{radiosError}</Text>
-          </ScalePress>
+          <InlineError message={radiosError} onRetry={() => setRadiosReloadKey((key) => key + 1)} />
         </View>
       ) : null}
     </View>
@@ -310,13 +308,7 @@ export default function ArtistDetailPage() {
           onEndReachedThreshold={0.5}
           ListFooterComponent={
             loadMoreError ? (
-              <ScalePress
-                style={styles.footerRetry}
-                onPress={() => void loadMore(true)}
-                accessibilityLabel="歌曲加载失败，重新加载"
-              >
-                <Text style={styles.footerRetryText}>加载失败，点此重试</Text>
-              </ScalePress>
+              <InlineError message="歌曲加载失败" onRetry={() => loadMore(true)} />
             ) : (
               <LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />
             )
@@ -325,20 +317,20 @@ export default function ArtistDetailPage() {
             loading ? (
               <SongListSkeleton rows={6} showSource />
             ) : songsError ? (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>歌曲加载失败</Text>
-                <ScalePress
-                  style={styles.retryBtn}
-                  onPress={() => setSongsReloadKey((key) => key + 1)}
-                  accessibilityLabel="重新加载歌曲"
-                >
-                  <Text style={styles.retryText}>重试</Text>
-                </ScalePress>
-              </View>
+              <EmptyState
+                variant="embedded"
+                icon={CircleAlert}
+                iconColor={colors.dangerText}
+                title="歌曲加载失败"
+                actionLabel="重试"
+                onAction={() => setSongsReloadKey((key) => key + 1)}
+              />
             ) : (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>暂无歌曲</Text>
-              </View>
+              <EmptyState
+                variant="embedded"
+                icon={Music2}
+                title="暂无歌曲"
+              />
             )
           }
           listHeader={id ? albumsHeader : null}
@@ -365,14 +357,6 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   albumsMore: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
   // 可点的「更多」是有效正文，不能用低对比 decorative 色
   albumsMoreText: { ...textVariants.footnote, color: colors.textSecondary },
-  albumsRetry: {
-    alignSelf: 'flex-start',
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[4],
-    borderRadius: radius.full,
-    backgroundColor: colors.bgSurface,
-  },
-  albumsRetryText: { ...textVariants.footnote, color: colors.textSecondary },
   albumCard: {
     width: 116,
     backgroundColor: colors.bgSurface,
@@ -387,16 +371,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   albumName: { ...textVariants.caption, color: colors.textSecondary, marginTop: spacing[1] },
   radioMeta: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   avatarFallback: { color: colors.textInverse, fontSize: 56, fontWeight: typography.weights.bold },
-  empty: { paddingVertical: spacing[12], alignItems: 'center' },
-  emptyText: { ...textVariants.callout, color: colors.textSecondary },
-  retryBtn: {
-    marginTop: spacing[3],
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-    backgroundColor: colors.bgHover,
-  },
-  retryText: { ...textVariants.footnote, color: colors.accent },
-  footerRetry: { alignItems: 'center', paddingVertical: spacing[4] },
-  footerRetryText: { ...textVariants.footnote, color: colors.accent },
 });

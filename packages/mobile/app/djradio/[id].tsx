@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Alert, StyleSheet, Text, View } from 'react-native';
+import { Alert, StyleSheet, View } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams } from 'expo-router';
 import { Download, Radio } from 'lucide-react-native';
@@ -20,12 +20,12 @@ import SongListSkeleton from '../../components/SongListSkeleton';
 import LoadMoreFooter from '../../components/LoadMoreFooter';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
 import EmptyState from '../../components/EmptyState';
+import InlineError from '../../components/InlineError';
 import ScalePress from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
 import { downloadSong } from '../../services/downloadService';
 import type { ThemeColors } from '../../theme/tokens';
-import { radius, spacing, textVariants } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
 const PAGE_SIZE = 30;
@@ -241,13 +241,7 @@ export default function DjRadioDetailPage() {
           onEndReachedThreshold={0.5}
           ListFooterComponent={
             programs.length > 0 && programsError ? (
-              <ScalePress
-                style={styles.footerRetry}
-                onPress={() => void loadMore(true)}
-                accessibilityLabel="节目加载失败，点此重试"
-              >
-                <Text style={styles.retryText}>加载失败，点此重试</Text>
-              </ScalePress>
+              <InlineError message="节目加载失败" onRetry={() => loadMore(true)} />
             ) : (
               <LoadMoreFooter loadingMore={loadingMore} hasMore={more} hasData={programs.length > 0} />
             )
@@ -256,19 +250,19 @@ export default function DjRadioDetailPage() {
             loading ? (
               <SongListSkeleton rows={6} showSource={false} />
             ) : error || programsError ? (
-              <View>
-                <EmptyState
-                  icon={Radio}
-                  title={error ? describeDjRadioFailure(detailFailure?.ok === false ? detailFailure.reason : undefined, error) : describeDjRadioFailure(programsFailure?.ok === false ? programsFailure.reason : undefined, programsError)}
-                  subtitle={error || programsError}
-                />
-                {(detailFailure?.ok === false && detailFailure.reason !== 'not-found')
-                  || (programsFailure?.ok === false && programsFailure.reason !== 'unsupported') ? (
-                  <ScalePress style={styles.retry} onPress={() => setReloadKey((key) => key + 1)}>
-                    <Text style={styles.retryText}>重试</Text>
-                  </ScalePress>
-                ) : null}
-              </View>
+              <EmptyState
+                icon={Radio}
+                iconColor={colors.dangerText}
+                title={error ? describeDjRadioFailure(detailFailure?.ok === false ? detailFailure.reason : undefined, error) : describeDjRadioFailure(programsFailure?.ok === false ? programsFailure.reason : undefined, programsError)}
+                subtitle={error || programsError}
+                actionLabel={
+                  (detailFailure?.ok === false && detailFailure.reason !== 'not-found')
+                  || (programsFailure?.ok === false && programsFailure.reason !== 'unsupported')
+                    ? '重试'
+                    : undefined
+                }
+                onAction={() => setReloadKey((key) => key + 1)}
+              />
             ) : (
               <EmptyState icon={Radio} title="这个电台还没有节目" subtitle="稍后再来看看" />
             )
@@ -285,14 +279,4 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   flex: { flex: 1 },
   // 图标钮在 CollapsingHero 的 navRight 胶囊内，不再额外留右距
   navAction: { alignItems: 'center', justifyContent: 'center' },
-  retry: {
-    alignSelf: 'center',
-    marginTop: spacing[4],
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-    backgroundColor: colors.bgHover,
-  },
-  retryText: { ...textVariants.footnote, color: colors.accent },
-  footerRetry: { alignItems: 'center', paddingVertical: spacing[4] },
 });

@@ -141,7 +141,7 @@ export default function RecommendPage() {
                       key={`${song.id}-${i}`}
                       style={[
                         styles.stackSlot,
-                        { left: i * 12, zIndex: stackSongs.length - i, transform: [{ rotate: `${(i - 1) * 5}deg` }] },
+                        { left: i * 14, zIndex: stackSongs.length - i, transform: [{ rotate: `${(i - 1) * 6}deg` }] },
                       ]}
                     >
                       {song.cover ? (
@@ -272,11 +272,11 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     paddingTop: spacing[4],
     paddingBottom: spacing[3],
   },
-  coverStack: { width: 70, height: 48, marginRight: spacing[3] },
-  stackSlot: { position: 'absolute', top: 4 },
+  coverStack: { width: 78, height: 52, marginRight: spacing[3] },
+  stackSlot: { position: 'absolute', top: 3 },
   stackCover: {
-    width: 40,
-    height: 40,
+    width: 42,
+    height: 42,
     borderRadius: radius.sm,
     borderWidth: 1,
     borderColor: colors.bgSurface,

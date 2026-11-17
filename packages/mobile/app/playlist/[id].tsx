@@ -15,10 +15,11 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScalePress from '../../components/ScalePress';
 import { CheckSquare, CircleAlert, MoreVertical, Music2, Pencil, Trash2, Upload } from 'lucide-react-native';
-import { useLocalSearchParams, Stack, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, Stack, useFocusEffect, router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import { useFavoriteStore } from '../../stores/favoriteStore';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+import EmptyState from '../../components/EmptyState';
 import PlaylistHero from '../../components/PlaylistHero';
 import PlaylistBatchBar from '../../components/PlaylistBatchBar';
 import AddToPlaylistModal from '../../components/AddToPlaylistModal';
@@ -242,10 +243,14 @@ export default function PlaylistDetailPage() {
               headerShadowVisible: false,
             }}
           />
-          <View style={styles.empty}>
-            <CircleAlert size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>歌单不存在</Text>
-          </View>
+          <EmptyState
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="歌单不存在"
+            subtitle="链接可能已失效"
+            actionLabel="返回"
+            onAction={() => goBackOrHome()}
+          />
         </SafeAreaView>
         <BottomSafePlayerBar />
       </View>
@@ -286,10 +291,13 @@ export default function PlaylistDetailPage() {
         />
 
         {isEmpty ? (
-          <View style={styles.empty}>
-            <Music2 size={64} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>歌单是空的</Text>
-          </View>
+          <EmptyState
+            icon={Music2}
+            title="歌单是空的"
+            subtitle="从发现页或搜索里添加歌曲"
+            actionLabel="去发现音乐"
+            onAction={() => router.replace('/')}
+          />
         ) : (
           <PlaylistHero
             playlist={playlist}
@@ -434,13 +442,6 @@ export default function PlaylistDetailPage() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 80,
-  },
-  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: spacing[3] },
 
   // 图标钮在 CollapsingHero 的 navRight 胶囊内，不再额外留右距
   moreBtn: { alignItems: 'center', justifyContent: 'center' },

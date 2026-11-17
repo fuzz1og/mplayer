@@ -17,7 +17,7 @@ import {
   Platform,
   type GestureResponderEvent,
 } from 'react-native';
-import { ChevronRight, Clock, Download, Heart, ListMusic, Play, Plus } from 'lucide-react-native';
+import { ChevronRight, Clock, Download, Heart, ListMusic, MoreVertical, Play, Plus } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { router } from 'expo-router';
 import { COVER_SIZE, type Song } from '@mplayer/core';
@@ -133,12 +133,14 @@ function PlaylistRow({
   first,
   last,
   onPress,
+  onMore,
   onLongPress,
 }: {
   playlist: Playlist;
   first: boolean;
   last: boolean;
   onPress: () => void;
+  onMore: () => void;
   onLongPress: () => void;
 }) {
   const { colors } = useTheme();
@@ -175,6 +177,14 @@ function PlaylistRow({
             {playlist.songs.length} 首 · {formatDate(playlist.createdAt)}
           </Text>
         </View>
+        <ScalePress
+          style={styles.rowMoreBtn}
+          onPress={(e) => { e?.stopPropagation(); onMore(); }}
+          hitSlop={{ top: 8, bottom: 8, left: 4, right: 8 }}
+          accessibilityLabel={`歌单操作：《${playlist.name}》`}
+        >
+          <MoreVertical size={18} color={colors.textTertiary} />
+        </ScalePress>
         <ChevronRight size={18} color={colors.textTertiary} />
       </ScalePress>
     </View>
@@ -189,6 +199,7 @@ export default function PlaylistsPage() {
   const playlists = usePlaylistStore((s) => s.playlists);
   const createPlaylist = usePlaylistStore((s) => s.createPlaylist);
   const deletePlaylist = usePlaylistStore((s) => s.deletePlaylist);
+  const renamePlaylist = usePlaylistStore((s) => s.renamePlaylist);
   const favorites = useFavoriteStore((s) => s.favorites);
   const historyCount = useHistoryStore((s) => s.history.length);
   const localCount = useDownloadStore((s) => s.items.filter((item) => item.status === 'done').length);
@@ -196,19 +207,38 @@ export default function PlaylistsPage() {
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
 
   const [modalVisible, setModalVisible] = useState(false);
+  /** null = 新建；有值 = 重命名 */
+  const [renameTarget, setRenameTarget] = useState<Playlist | null>(null);
   const [newName, setNewName] = useState('');
   const [inputFocused, setInputFocused] = useState(false);
+
+  const openCreateModal = () => {
+    setRenameTarget(null);
+    setNewName('');
+    setModalVisible(true);
+  };
+
+  const openRenameModal = (item: Playlist) => {
+    setRenameTarget(item);
+    setNewName(item.name);
+    setModalVisible(true);
+  };
 
   const closeCreateModal = () => {
     Keyboard.dismiss();
     setNewName('');
+    setRenameTarget(null);
     setModalVisible(false);
   };
 
   const handleCreate = () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
-    createPlaylist(trimmed);
+    if (renameTarget) {
+      renamePlaylist(renameTarget.id, trimmed);
+    } else {
+      createPlaylist(trimmed);
+    }
     closeCreateModal();
   };
 
@@ -219,12 +249,21 @@ export default function PlaylistsPage() {
     ]);
   };
 
+  const handleMore = (item: Playlist) => {
+    Alert.alert(item.name, undefined, [
+      { text: '重命名', onPress: () => openRenameModal(item) },
+      { text: '删除', style: 'destructive', onPress: () => handleDelete(item) },
+      { text: '取消', style: 'cancel' },
+    ]);
+  };
+
   const renderItem = ({ item, index }: { item: Playlist; index: number }) => (
     <PlaylistRow
       playlist={item}
       first={index === 0}
       last={index === playlists.length - 1}
       onPress={() => router.push(`/playlist/${item.id}`)}
+      onMore={() => handleMore(item)}
       onLongPress={() => handleDelete(item)}
     />
   );
@@ -267,7 +306,7 @@ export default function PlaylistsPage() {
               </View>
               <ScalePress
                 style={styles.newGroupBtn}
-                onPress={() => setModalVisible(true)}
+                onPress={openCreateModal}
                 hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
                 accessibilityLabel="新建歌单"
               >
@@ -300,7 +339,7 @@ export default function PlaylistsPage() {
               style={styles.modalContent}
               onPress={() => {}}
             >
-              <Text style={styles.modalTitle}>新建歌单</Text>
+              <Text style={styles.modalTitle}>{renameTarget ? '重命名歌单' : '新建歌单'}</Text>
               <TextInput
                 style={[styles.modalInput, inputFocused && styles.modalInputFocused]}
                 placeholder="输入歌单名称"
@@ -329,9 +368,9 @@ export default function PlaylistsPage() {
                   ]}
                   onPress={handleCreate}
                   disabled={!newName.trim()}
-                  accessibilityLabel="创建歌单"
+                  accessibilityLabel={renameTarget ? '保存歌单名称' : '创建歌单'}
                 >
-                  <Text style={styles.confirmText}>创建</Text>
+                  <Text style={styles.confirmText}>{renameTarget ? '保存' : '创建'}</Text>
                 </ScalePress>
               </View>
             </Pressable>
@@ -462,6 +501,13 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     height: 48,
     borderRadius: radius.md,
     marginRight: spacing[3],
+  },
+  rowMoreBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing[1],
   },
   rowInfo: { flex: 1 },
   rowName: { ...textVariants.body, color: colors.textPrimary },

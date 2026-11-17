@@ -8,7 +8,7 @@ import {
 } from 'react-native';
 import ScalePress from '../../components/ScalePress';
 import { useLocalSearchParams, router } from 'expo-router';
-import { CircleAlert, ListMusic, Music2, Radio, User } from 'lucide-react-native';
+import { CircleAlert, ListMusic, Music2, Radio, RefreshCw, User } from 'lucide-react-native';
 import { formatPlayCount, getDirectClient, describeDjRadioSearchFailure } from '@mplayer/core';
 import type { DiscoverPlaylist, DjRadio, SongGroup } from '@mplayer/core';
 import { useSearchStore } from '../../stores/searchStore';
@@ -18,6 +18,8 @@ import SongList from '../../components/SongList';
 import type { SongListRow } from '../../components/SongList';
 import SongListSkeleton from '../../components/SongListSkeleton';
 import CoverGridSkeleton from '../../components/CoverGridSkeleton';
+import EmptyState from '../../components/EmptyState';
+import InlineError from '../../components/InlineError';
 import LazyCover from '../../components/LazyCover';
 import { listWindowProps } from '../../components/listWindow';
 import { GRID_CARD } from '../../components/gridCardMetrics';
@@ -238,10 +240,16 @@ export default function SearchPage() {
         loading && results.length === 0 ? (
           <SongListSkeleton showSource />
         ) : error && results.length === 0 ? (
-          <View style={styles.emptyContainer}>
-            <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.dangerText }]}>{error}</Text>
-          </View>
+          <EmptyState
+            variant="embedded"
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="歌曲搜索失败"
+            subtitle={error}
+            actionLabel="重试"
+            actionIcon={RefreshCw}
+            onAction={() => { void search(q); }}
+          />
         ) : results.length > 0 ? (
           // 多源/单源分开渲染:全部源按歌分组(同歌各源合并),单源按源分组
           source === 'all' ? (
@@ -250,22 +258,27 @@ export default function SearchPage() {
             <SingleSourceResults results={results} loadMore={loadMore} loadingMore={loadingMore} hasMore={hasMore} />
           )
         ) : (
-          <View style={styles.emptyContainer}>
-            <Music2 size={48} color={colors.textDisabled} />
-            <Text style={styles.emptyText}>搜索歌曲和歌手</Text>
-          </View>
+          <EmptyState
+            variant="embedded"
+            icon={Music2}
+            title="搜索歌曲和歌手"
+            subtitle="输入关键词后在这里查看结果"
+          />
         )
       ) : activeTab === 'djradios' ? (
         djradiosLoading && djradios.length === 0 ? (
           <CoverGridSkeleton columns={2} />
         ) : djradiosError ? (
-          <View style={styles.emptyContainer}>
-            <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.dangerText }]}>{djradiosError}</Text>
-            <ScalePress style={styles.retryButton} onPress={() => void searchDjradios(q, true)}>
-              <Text style={styles.retryText}>重试</Text>
-            </ScalePress>
-          </View>
+          <EmptyState
+            variant="embedded"
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="电台搜索失败"
+            subtitle={djradiosError}
+            actionLabel="重试"
+            actionIcon={RefreshCw}
+            onAction={() => { void searchDjradios(q, true); }}
+          />
         ) : djradios.length > 0 ? (
           <FlatList
             key="djradio-results"
@@ -300,23 +313,26 @@ export default function SearchPage() {
             )}
           />
         ) : (
-          <View style={styles.emptyContainer}>
-            <Radio size={48} color={colors.textDisabled} />
-            <Text style={styles.emptyText}>没有搜到电台</Text>
-          </View>
+          <EmptyState
+            variant="embedded"
+            icon={Radio}
+            title="没有搜到电台"
+          />
         )
       ) : activeTab === 'playlists' ? (
         // 歌单（#415）：复用发现页同款 2 列方图卡片与既有歌单详情页
         playlistsLoading && playlists.length === 0 ? (
           <CoverGridSkeleton columns={2} />
         ) : playlistsError ? (
-          <View style={styles.emptyContainer}>
-            <CircleAlert size={48} color={colors.danger} />
-            <Text style={[styles.emptyText, { color: colors.dangerText }]}>歌单搜索失败</Text>
-            <ScalePress style={styles.retryButton} onPress={() => void searchPlaylists(q, true)}>
-              <Text style={styles.retryText}>重试</Text>
-            </ScalePress>
-          </View>
+          <EmptyState
+            variant="embedded"
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="歌单搜索失败"
+            actionLabel="重试"
+            actionIcon={RefreshCw}
+            onAction={() => { void searchPlaylists(q, true); }}
+          />
         ) : playlists.length > 0 ? (
           <FlatList
             key="playlist-results"
@@ -335,11 +351,7 @@ export default function SearchPage() {
             onEndReachedThreshold={0.5}
             ListFooterComponent={
               playlistsMoreError ? (
-                <View style={styles.footerCenter}>
-                  <ScalePress style={styles.retryButton} onPress={() => void loadMorePlaylists(true)}>
-                    <Text style={styles.retryText}>加载更多失败，点此重试</Text>
-                  </ScalePress>
-                </View>
+                <InlineError message="加载更多失败，点此重试" onRetry={() => loadMorePlaylists(true)} />
               ) : (
                 <LoadMoreFooter
                   loadingMore={playlistsLoadingMore}
@@ -368,20 +380,27 @@ export default function SearchPage() {
             )}
           />
         ) : (
-          <View style={styles.emptyContainer}>
-            <ListMusic size={48} color={colors.textDisabled} />
-            <Text style={styles.emptyText}>没有搜到歌单，去发现页看看歌单广场</Text>
-          </View>
+          <EmptyState
+            variant="embedded"
+            icon={ListMusic}
+            title="没有搜到歌单"
+            subtitle="去发现页看看歌单广场"
+          />
         )
       ) : artistsLoading ? (
         // 歌手加载：**必须用网格骨架**（真实结果是 3 列圆头像 + 居中名字）。
         // 此前这里是 SongListSkeleton——歌手页加载出「歌曲行」形状，结构完全不匹配（#416）。
         <CoverGridSkeleton columns={3} variant="artist" />
       ) : artistsError ? (
-        <View style={styles.emptyContainer}>
-          <CircleAlert size={48} color={colors.danger} />
-          <Text style={[styles.emptyText, { color: colors.dangerText }]}>歌手搜索失败</Text>
-        </View>
+        <EmptyState
+          variant="embedded"
+          icon={CircleAlert}
+          iconColor={colors.dangerText}
+          title="歌手搜索失败"
+          actionLabel="重试"
+          actionIcon={RefreshCw}
+          onAction={() => { void searchArtists(q); }}
+        />
       ) : artists.length > 0 ? (
         <FlatList
           key="artist-results"
@@ -413,10 +432,11 @@ export default function SearchPage() {
           )}
         />
       ) : (
-        <View style={styles.emptyContainer}>
-          <User size={48} color={colors.textDisabled} />
-          <Text style={styles.emptyText}>未找到相关歌手</Text>
-        </View>
+        <EmptyState
+          variant="embedded"
+          icon={User}
+          title="未找到相关歌手"
+        />
       )}
     </Animated.View>
   );
@@ -504,26 +524,7 @@ function SingleSourceResults({ results, loadMore, loadingMore, hasMore }: Result
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
-  // 组头样式已随「拍平」搬进 components/SongList.tsx（groupHeader / groupHeaderQuiet 两档）：
-  // 组头现在是列表里的**行**，样式跟着行组件走，不再由页面各写一份（#411）。
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: spacing[3] },
-  retryButton: {
-    marginTop: spacing[4],
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-    backgroundColor: colors.bgHover,
-  },
-  retryText: { ...textVariants.footnote, color: colors.accent },
-  /** 页脚重试兜底：翻页失败时替代 LoadMoreFooter 的那一行 */
-  footerCenter: { alignItems: 'center', paddingVertical: spacing[4] },
-  // 歌单网格（#415）：与发现页歌单 tab 同款 2 列方图卡片。
-  // 度量统一走 gridMetrics/gridCardMetrics（#416：禁止在调用方重写宽度公式）。
+  // 组头样式在 SongList（#411）；歌单网格与发现页同款 2 列，度量走 gridMetrics（#416）。
   playlistGrid: {
     paddingHorizontal: spacing[4],
     paddingBottom: spacing[6],

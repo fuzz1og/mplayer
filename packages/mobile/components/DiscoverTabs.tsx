@@ -28,7 +28,8 @@ import LoadMoreFooter from './LoadMoreFooter';
 import BottomSheet from './BottomSheet';
 import DiscoverHero from './DiscoverHero';
 import ChartRow from './DiscoverChartRow';
-import DiscoverStateView, { DiscoverInlineError } from './DiscoverStateView';
+import DiscoverStateView from './DiscoverStateView';
+import InlineError from './InlineError';
 import {
   useDiscoverStore,
   buildHotlistQueue,
@@ -249,7 +250,7 @@ function HotlistContent() {
   if (empty) {
     return (
       <View style={styles.stateFill}>
-        <DiscoverStateView title="榜单为空" message="暂时没有拿到榜单内容" actionLabel="重新加载" onAction={retry} />
+        <DiscoverStateView tone="empty" title="榜单为空" message="暂时没有拿到榜单内容" actionLabel="重新加载" onAction={retry} />
       </View>
     );
   }
@@ -276,7 +277,7 @@ function HotlistContent() {
           onPress={() => { void playChartSong(chart.hotlist, 0, source); }}
         />
       ) : null}
-      {error ? <DiscoverInlineError message="榜单刷新失败" onRetry={retry} /> : null}
+      {error ? <InlineError message="榜单刷新失败" onRetry={retry} /> : null}
       {sections.map((section) => (
         <ChartSection
           key={section.key}
@@ -453,7 +454,7 @@ function AlbumsContent() {
             {featured ? <AlbumFeature album={featured} /> : null}
             <CategoryPills items={ALBUM_AREAS} activeValue={area} onSelect={setArea} />
             {loadingError && albums.length > 0 ? (
-              <DiscoverInlineError message="新碟刷新失败" onRetry={retry} />
+              <InlineError message="新碟刷新失败" onRetry={retry} />
             ) : null}
             {albums.length > 0 ? (
               <View style={styles.gridSectionHeader}>
@@ -478,7 +479,7 @@ function AlbumsContent() {
           loadingError ? (
             <DiscoverStateView title="新碟加载失败" message="检查网络后重试" onAction={retry} />
           ) : (
-            <DiscoverStateView title="暂无新碟" message="换个地区看看，或稍后重试" actionLabel="重新加载" onAction={retry} />
+            <DiscoverStateView tone="empty" title="暂无新碟" message="换个地区看看，或稍后重试" actionLabel="重新加载" onAction={retry} />
           )
         }
       />
@@ -668,7 +669,7 @@ function PlaylistContent() {
       />
       {/* 分类切换失败但保留了旧列表：错误必须可见，不能静默展示旧分类内容 */}
       {loadingError && playlists.length > 0 ? (
-        <DiscoverInlineError message="歌单刷新失败" onRetry={retry} />
+        <InlineError message="歌单刷新失败" onRetry={retry} />
       ) : null}
       <FlatList
         style={styles.tabContent}
@@ -689,12 +690,12 @@ function PlaylistContent() {
           loadingError ? (
             <DiscoverStateView title="歌单加载失败" message="检查网络后重试" onAction={retry} />
           ) : (
-            <DiscoverStateView title="暂无歌单" message="换个分类看看，或稍后重试" actionLabel="重新加载" onAction={retry} />
+            <DiscoverStateView tone="empty" title="暂无歌单" message="换个分类看看，或稍后重试" actionLabel="重新加载" onAction={retry} />
           )
         }
         ListFooterComponent={
           moreError ? (
-            <DiscoverInlineError message="加载更多失败" onRetry={loadMore} />
+            <InlineError message="加载更多失败" onRetry={loadMore} />
           ) : (
             <LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={playlists.length > 0} />
           )
@@ -821,7 +822,7 @@ function ArtistContent() {
       />
       {/* 分类切换失败但保留了旧列表：错误必须可见，不能静默展示旧分类内容 */}
       {loadingError && artists.length > 0 ? (
-        <DiscoverInlineError message="歌手刷新失败" onRetry={retry} />
+        <InlineError message="歌手刷新失败" onRetry={retry} />
       ) : null}
       <FlatList
         style={styles.tabContent}
@@ -843,12 +844,12 @@ function ArtistContent() {
           loadingError ? (
             <DiscoverStateView title="歌手加载失败" message="检查网络后重试" onAction={retry} />
           ) : (
-            <DiscoverStateView title="暂无歌手" message="换个分类看看，或稍后重试" actionLabel="重新加载" onAction={retry} />
+            <DiscoverStateView tone="empty" title="暂无歌手" message="换个分类看看，或稍后重试" actionLabel="重新加载" onAction={retry} />
           )
         }
         ListFooterComponent={
           moreError ? (
-            <DiscoverInlineError message="加载更多失败" onRetry={loadMore} />
+            <InlineError message="加载更多失败" onRetry={loadMore} />
           ) : (
             <LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={artists.length > 0} />
           )

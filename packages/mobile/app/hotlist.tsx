@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
   formatPlayCount,
   getToplistDetailRouted,
@@ -20,12 +20,13 @@ import {
   TOPLIST_SOURCE_IDS,
 } from '@mplayer/core';
 import type { Song, SourceKey, ToplistDetail } from '@mplayer/core';
-import { Download, Loader2 } from 'lucide-react-native';
+import { CircleAlert, Download, Loader2 } from 'lucide-react-native';
 import CollapsingHero from '../components/CollapsingHero';
 import CoverFallback from '../components/CoverFallback';
 import HeroSkeleton from '../components/HeroSkeleton';
 import SongRow from '../components/SongRow';
 import BottomSheet from '../components/BottomSheet';
+import EmptyState from '../components/EmptyState';
 import ScalePress from '../components/ScalePress';
 import { createMobilePlaylistWriter } from '../services/playlistExport';
 
@@ -196,7 +197,13 @@ export default function HotlistPage() {
               headerShadowVisible: false,
             }}
           />
-          <Text style={styles.errorText}>未知榜单类型</Text>
+          <EmptyState
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="未知榜单类型"
+            actionLabel="返回"
+            onAction={() => router.back()}
+          />
         </SafeAreaView>
         <BottomSafePlayerBar />
       </View>
@@ -296,7 +303,6 @@ export default function HotlistPage() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  errorText: { color: colors.textSecondary, ...textVariants.callout, textAlign: 'center', marginTop: spacing[10] },
   // 与 CollapsingHero 的返回钮同规格（40×40 圆形热区），保证折叠后的导航栏左右对称
   navAction: {
     width: 40,
