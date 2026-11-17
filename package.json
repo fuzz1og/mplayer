@@ -44,8 +44,8 @@
   },
   "dependencies": {
     "buffer": "^6.0.3",
-    "electron-updater": "^6.8.9",
-    "mp3tag.js": "^3.17.0",
+    "electron-updater": "^6.8.11",
+    "mp3tag.js": "^3.17.1",
     "music-metadata": "^11.16.1"
   },
   "overrides": {
@@ -95,7 +95,7 @@
     "esbuild": "0.25.2",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "expo": "~57.0.32",
+    "expo": "~57.0.33",
     "fs-extra": "^11.4.0",
     "globals": "^17.13.0",
     "howler": "^2.2.4",
