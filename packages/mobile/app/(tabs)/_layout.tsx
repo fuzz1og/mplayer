@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef } from 'react';
 import { Tabs, usePathname, router } from 'expo-router';
 import type { Href } from 'expo-router';
-import { Compass, Flame, ListMusic, Download } from 'lucide-react-native';
+import { Compass, Flame, ListMusic } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { View, Text, StyleSheet, Animated } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +23,6 @@ const TABS: { name: string; href: Href; icon: LucideIcon; label: string }[] = [
   { name: 'recommend', href: '/recommend', icon: Flame, label: '推荐' },
   { name: 'index', href: '/', icon: Compass, label: '发现' },
   { name: 'playlists', href: '/playlists', icon: ListMusic, label: '歌单' },
-  { name: 'download', href: '/download', icon: Download, label: '本地歌曲' },
 ];
 
 /**
@@ -128,7 +127,6 @@ export default function TabLayout() {
           <Tabs.Screen name="index" options={{ title: '发现' }} />
           <Tabs.Screen name="search" options={{ title: '搜索', href: null }} />
           <Tabs.Screen name="playlists" options={{ title: '歌单' }} />
-          <Tabs.Screen name="download" options={{ title: '本地歌曲' }} />
         </Tabs>
       </View>
       {/* 顶部 chrome 悬浮（M2）：内容从半透明 TopBar 下穿过 */}

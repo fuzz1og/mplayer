@@ -9,16 +9,17 @@ import { useAnimatedBg } from '../../theme/AnimatedBg';
 import { gridCardWidth } from '../../components/gridMetrics';
 import { GRID_CARD } from '../../components/gridCardMetrics';
 
-import { CircleAlert, Play, RefreshCw, ListMusic } from 'lucide-react-native';
+import { CircleAlert, Play, RefreshCw, ListMusic, Music } from 'lucide-react-native';
 import { cacheManager, getDirectClient, formatPlayCount, pickRandomBatch, type Song, type DiscoverPlaylist } from '@mplayer/core';
 import SongRow from '../../components/SongRow';
 import RecommendSkeleton from '../../components/RecommendSkeleton';
 import LazyCover from '../../components/LazyCover';
 import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from '../../components/recommendMetrics';
+import { formatBatchMeta } from '../../components/recommendMeta';
 import ScalePress, { pressScale } from '../../components/ScalePress';
 import { usePlayerStore } from '../../stores/playerStore';
 import { playSong } from '../../services/audioPlayer';
-import { opacity, spacing, textVariants } from '../../theme/tokens';
+import { opacity, radius, spacing, textVariants } from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -81,6 +82,8 @@ export default function RecommendPage() {
   const shownSongs = batch;
   // 池子不超过一批时没有「换一批」的语义：禁用而不是点了没反应
   const canShuffle = songs.length > RECOMMEND_BATCH_SIZE;
+  // 卡头封面叠放最多三张；batch 为空时退化为单个占位
+  const stackSongs = shownSongs.slice(0, 3);
 
   const handlePlayAll = () => {
     // 只把**当前可见批次**入队：此前把 100 首随机池全塞进队列，用户以为「播放全部」只播 5 首，
@@ -124,47 +127,79 @@ export default function RecommendPage() {
         </View>
       ) : (
         <>
-          {/* 今日推荐 */}
-          <View style={styles.section}>
-            <View style={styles.sectionHeader}>
-              <Text style={styles.sectionTitle}>今日推荐</Text>
-              {songs.length > 0 && (
-                <View style={styles.headerActions}>
-                  <ScalePress
-                    onPress={handlePlayAll}
-                    style={styles.headerAction}
-                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                    accessibilityLabel="播放全部（当前推荐）"
-                  >
-                    <Play size={15} color={colors.accent} />
-                    <Text style={[styles.headerActionText, { color: colors.accent }]}>播放全部</Text>
-                  </ScalePress>
-                  <ScalePress
-                    onPress={handleShuffle}
-                    style={[styles.headerAction, !canShuffle && { opacity: opacity.disabled }]}
-                    hitSlop={{ top: 6, bottom: 6, left: 4, right: 4 }}
-                    disabled={!canShuffle}
-                    accessibilityLabel="换一批推荐"
-                    accessibilityState={{ disabled: !canShuffle }}
-                  >
-                    <RefreshCw size={15} color={canShuffle ? colors.textSecondary : colors.textDisabled} />
-                    <Text style={[styles.headerActionText, { color: canShuffle ? colors.textSecondary : colors.textDisabled }]}>换一批</Text>
-                  </ScalePress>
+          {/* 每日推荐：5 首收进一张卡，卡头承担「今日推荐」标题与动作 */}
+          <View style={styles.radioSection}>
+            <View style={styles.radioCard}>
+              <View style={styles.radioHeader}>
+                <View
+                  style={styles.coverStack}
+                  accessibilityElementsHidden
+                  importantForAccessibility="no-hide-descendants"
+                >
+                  {stackSongs.length > 0 ? stackSongs.map((song, i) => (
+                    <View
+                      key={`${song.id}-${i}`}
+                      style={[
+                        styles.stackSlot,
+                        { left: i * 12, zIndex: stackSongs.length - i, transform: [{ rotate: `${(i - 1) * 5}deg` }] },
+                      ]}
+                    >
+                      {song.cover ? (
+                        <LazyCover uri={song.cover} style={styles.stackCover} />
+                      ) : (
+                        <View style={[styles.stackCover, styles.stackFallback]}>
+                          <Music size={16} color={colors.textDisabled} />
+                        </View>
+                      )}
+                    </View>
+                  )) : (
+                    <View style={[styles.stackCover, styles.stackFallback]}>
+                      <Music size={16} color={colors.textDisabled} />
+                    </View>
+                  )}
+                </View>
+                <View style={styles.radioInfo}>
+                  <Text style={styles.radioTitle}>每日推荐</Text>
+                  <Text style={styles.radioMeta}>{formatBatchMeta(shownSongs)}</Text>
+                </View>
+              </View>
+
+              <View style={styles.radioActions}>
+                <ScalePress
+                  onPress={handlePlayAll}
+                  style={[styles.playAllBtn, shownSongs.length === 0 && { opacity: opacity.disabled }]}
+                  disabled={shownSongs.length === 0}
+                  accessibilityLabel="播放全部（当前推荐）"
+                  accessibilityState={{ disabled: shownSongs.length === 0 }}
+                >
+                  <Play size={14} color={colors.textInverse} fill={colors.textInverse} />
+                  <Text style={styles.playAllText}>播放全部</Text>
+                </ScalePress>
+                <ScalePress
+                  onPress={handleShuffle}
+                  style={[styles.shuffleBtn, !canShuffle && { opacity: opacity.disabled }]}
+                  disabled={!canShuffle}
+                  accessibilityLabel="换一批推荐"
+                  accessibilityState={{ disabled: !canShuffle }}
+                >
+                  <RefreshCw size={14} color={canShuffle ? colors.textSecondary : colors.textDisabled} />
+                  <Text style={[styles.shuffleText, { color: canShuffle ? colors.textSecondary : colors.textDisabled }]}>换一批</Text>
+                </ScalePress>
+              </View>
+
+              {shownSongs.length === 0 ? (
+                <Text style={styles.emptyText}>暂无推荐歌曲</Text>
+              ) : (
+                <View style={styles.radioRows}>
+                  {shownSongs.map((s, i) => (
+                    <SongRow key={`${s.id}-${i}`} song={s} queueSongs={shownSongs} />
+                  ))}
                 </View>
               )}
             </View>
-            {shownSongs.length === 0 ? (
-              <Text style={styles.emptyText}>暂无推荐歌曲</Text>
-            ) : (
-              // 这一页**不是同构歌曲列表**（同屏还有猜你喜欢的网格卡片），所以不套 
-              // components/SongList（#411 的范围是「同构歌曲长列表」）。
-              shownSongs.map((s, i) => (
-                <SongRow key={`${s.id}-${i}`} song={s} queueSongs={shownSongs} />
-              ))
-            )}
           </View>
 
-          {/* 猜你喜欢 */}
+          {/* 猜你喜欢：两列网格，纵向浏览符合列表直觉 */}
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>猜你喜欢</Text>
             {playlists.length === 0 ? (
@@ -177,11 +212,12 @@ export default function RecommendPage() {
                     style={{ width: cardW }}
                     pressScaleTo={pressScale.row}
                     onPress={() => router.push(`/discover-playlist/${p.id}` as any)}
+                    accessibilityLabel={`${p.name}，歌单`}
                   >
                     {p.coverImgUrl ? (
                       <LazyCover uri={p.coverImgUrl} style={[styles.gridCover, { width: cardW, height: cardW }]} />
                     ) : (
-                      <View style={[styles.gridCover, styles.gridCoverFallback]}>
+                      <View style={[styles.gridCover, styles.gridCoverFallback, { width: cardW, height: cardW }]}>
                         <ListMusic size={32} color={colors.textDisabled} />
                       </View>
                     )}
@@ -204,42 +240,88 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
   content: { paddingBottom: spacing[8] },
-  section: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: spacing[2],
-  },
-  headerActions: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[2],
-  },
+  section: { paddingHorizontal: spacing[4], marginTop: spacing[6] },
   sectionTitle: {
     ...textVariants.sectionHeader,
     color: colors.textPrimary,
+    marginBottom: spacing[3],
   },
-  /* 头部动作：安静文字按钮（AM 式）——去底色去圆角，触控目标靠 padding + hitSlop */
-  headerAction: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing[1],
-    paddingVertical: spacing[1],
+  emptyText: {
+    ...textVariants.footnote,
+    color: colors.textSecondary,
+    paddingHorizontal: spacing[4],
+    paddingVertical: spacing[5],
+    textAlign: 'center',
   },
-  headerActionText: { ...textVariants.footnote, fontWeight: '600' },
-  emptyText: { ...textVariants.footnote, color: colors.textSecondary, marginVertical: spacing[5], textAlign: 'center' },
   errorBox: {
     alignItems: 'center',
     paddingTop: 80,
   },
   errorText: { ...textVariants.subhead, fontWeight: '400', color: colors.dangerText, marginTop: spacing[3] },
+  // 每日推荐卡
+  radioSection: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
+  radioCard: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
+  },
+  radioHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[3],
+  },
+  coverStack: { width: 70, height: 48, marginRight: spacing[3] },
+  stackSlot: { position: 'absolute', top: 4 },
+  stackCover: {
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+    borderWidth: 1,
+    borderColor: colors.bgSurface,
+    backgroundColor: colors.bgHover,
+  },
+  stackFallback: { alignItems: 'center', justifyContent: 'center' },
+  radioInfo: { flex: 1 },
+  radioTitle: { ...textVariants.title, color: colors.textPrimary },
+  radioMeta: { ...textVariants.footnote, color: colors.textSecondary, marginTop: 2 },
+  radioActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[3],
+  },
+  playAllBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    backgroundColor: colors.accent,
+    borderRadius: radius.full,
+    paddingHorizontal: spacing[3],
+    minHeight: 32,
+    paddingVertical: 6,
+  },
+  playAllText: { ...textVariants.footnote, fontWeight: '600', color: colors.textInverse },
+  shuffleBtn: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[1],
+    paddingVertical: 6,
+    paddingHorizontal: spacing[1],
+  },
+  shuffleText: { ...textVariants.footnote, fontWeight: '500' },
+  radioRows: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
+  },
+  // 猜你喜欢两列网格（度量与 RecommendSkeleton 同源）
   grid: {
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: spacing[3],
   },
-  // 网格卡片度量与 RecommendSkeleton 同源（#416）
   gridCover: { borderRadius: GRID_CARD.coverRadius, backgroundColor: colors.bgSurface },
   gridCoverFallback: {
     justifyContent: 'center',

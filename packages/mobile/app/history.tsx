@@ -1,17 +1,19 @@
-import { View, StyleSheet } from 'react-native';
+import { View, StyleSheet, Alert } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongList from '../components/SongList';
 import type { SongListRow } from '../components/SongList';
 import EmptyState from '../components/EmptyState';
-import { Clock } from 'lucide-react-native';
+import ScalePress from '../components/ScalePress';
+import { Clock, Trash2 } from 'lucide-react-native';
 import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 import { useHistoryStore } from '../stores/historyStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
 import { useCallback, useMemo } from 'react';
 import type { Song } from '@mplayer/core';
+import { spacing } from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -35,16 +37,20 @@ export default function HistoryPage() {
 
   const handleRemove = useCallback((song: Song) => removeHistory(song.id), [removeHistory]);
 
-  const headerAction = useMemo(() => ({ label: '清空', onPress: clearHistory, danger: true }), [clearHistory]);
+  // 原生 header 已显示页名，列表里不再放重复的「播放历史」标题行。
+  // 清空是破坏性操作：放 headerRight，先确认再执行。
+  const handleClear = useCallback(() => {
+    Alert.alert('清空播放历史', '将移除全部播放记录，此操作不可撤销。', [
+      { text: '取消', style: 'cancel' },
+      { text: '清空', style: 'destructive', onPress: clearHistory },
+    ]);
+  }, [clearHistory]);
 
   // 行 key 用**歌曲 id**，不拼 index（#411）：historyStore 按 id 去重，
   // 此前 `${id}-${index}` 会让「删掉一项」把它后面所有行全部重挂载。
   const rows = useMemo<SongListRow[]>(
-    () => [
-      { kind: 'sectionHeader', key: 'header', title: '播放历史', action: headerAction },
-      ...history.map((song) => ({ kind: 'song' as const, key: song.id, song, showSource: true })),
-    ],
-    [history, headerAction],
+    () => history.map((song) => ({ kind: 'song' as const, key: song.id, song, showSource: true })),
+    [history],
   );
 
   return (
@@ -58,6 +64,18 @@ export default function HistoryPage() {
           headerStyle: { backgroundColor: colors.bgSurface },
           headerTintColor: colors.textPrimary,
           headerShadowVisible: false,
+          headerRight: history.length > 0
+            ? () => (
+              <ScalePress
+                style={styles.clearBtn}
+                onPress={handleClear}
+                hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+                accessibilityLabel="清空播放历史"
+              >
+                <Trash2 size={20} color={colors.textSecondary} />
+              </ScalePress>
+            )
+            : undefined,
         }} />
         {history.length === 0 ? (
           <EmptyState
@@ -83,7 +101,13 @@ export default function HistoryPage() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  // 表头（title + 清空）已改为列表里的 sectionHeader 行（#411）：
-  // 用 ListHeaderComponent 会让 getItemLayout 的偏移语义与表头高度打架，而它是固定行高的。
+  // 页名与清空都交给原生 header；列表直接从歌曲行开始。
+  clearBtn: {
+    width: 36,
+    height: 36,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginRight: spacing[2],
+  },
   list: {},
 });

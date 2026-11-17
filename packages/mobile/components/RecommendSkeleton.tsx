@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { View, Animated, StyleSheet } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { topChromeHeight, bottomChromeHeight, SECTION_TAIL_PADDING } from './chromeMetrics';
@@ -7,6 +8,8 @@ import SongRowSkeleton from './SongRowSkeleton';
 import { useAnimatedBg } from '../theme/AnimatedBg';
 import { usePlayerStore } from '../stores/playerStore';
 import { radius, spacing } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
 import SkeletonBlock from './SkeletonBlock';
 import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from './recommendMetrics';
 
@@ -18,6 +21,8 @@ import { RECOMMEND_BATCH_SIZE, RECOMMEND_GRID_COLS } from './recommendMetrics';
 export default function RecommendSkeleton() {
   const insets = useSafeAreaInsets();
   const animatedBg = useAnimatedBg();
+  const { colors } = useTheme();
+  const styles = useMemo(() => makeStyles(colors), [colors]);
   // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小（与真实页同一判定）
   const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
   const cardW = gridCardWidth({ cols: RECOMMEND_GRID_COLS });
@@ -30,23 +35,33 @@ export default function RecommendSkeleton() {
           paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + SECTION_TAIL_PADDING,
         }}
       >
-        {/* 今日推荐：节标题 + 右侧「播放全部 / 换一批」两个动作位 */}
+        {/* 每日推荐卡：卡头封面叠放 + 标题 / meta + 两个动作 + 5 行歌曲 */}
         <View style={styles.section}>
-          <View style={styles.sectionHeader}>
-            <SkeletonBlock style={styles.titleBlock} />
-            <View style={styles.headerActions}>
-              <SkeletonBlock style={styles.actionBlock} />
-              <SkeletonBlock style={styles.actionBlock} />
+          <View style={styles.card}>
+            <View style={styles.cardHeader}>
+              <View style={styles.coverStack}>
+                <SkeletonBlock style={[styles.stackCover, styles.stackBack]} />
+                <SkeletonBlock style={[styles.stackCover, styles.stackMid]} />
+                <SkeletonBlock style={[styles.stackCover, styles.stackFront]} />
+              </View>
+              <View style={styles.cardInfo}>
+                <SkeletonBlock style={styles.radioTitle} />
+                <SkeletonBlock style={styles.radioMeta} />
+              </View>
+            </View>
+            <View style={styles.cardActions}>
+              <SkeletonBlock style={styles.playBtn} />
+              <SkeletonBlock style={styles.shuffleBtn} />
+            </View>
+            <View style={styles.cardRows}>
+              {Array.from({ length: RECOMMEND_BATCH_SIZE }, (_, i) => (
+                <SongRowSkeleton key={i} showActions separator="bottom" />
+              ))}
             </View>
           </View>
-          {/* 今日推荐的行就是 SongRow（含收藏/更多两列），故直接复用同一行的骨架（#416）：
-              此前这里手写且漏了右侧动作列，歌名可用宽度与真实行不同 → 数据到达时位移 */}
-          {Array.from({ length: RECOMMEND_BATCH_SIZE }, (_, i) => (
-            <SongRowSkeleton key={i} showActions />
-          ))}
         </View>
 
-        {/* 猜你喜欢：节标题 + 2 列卡片（封面 + 两行文字） */}
+        {/* 猜你喜欢：两列网格，骨架出首屏一行两张 */}
         <View style={styles.section}>
           <SkeletonBlock style={[styles.titleBlock, styles.gridTitle]} />
           <View style={styles.grid}>
@@ -64,24 +79,51 @@ export default function RecommendSkeleton() {
   );
 }
 
-// 本骨架不含任何取色（骨架块自己带主题色，歌曲行在 SongRowSkeleton），故是模块级常量
-const styles = StyleSheet.create({
+const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1 },
-  // 与真实页 styles.section 同值
+  // 与真实页 styles.radioSection 同值
   section: { paddingHorizontal: spacing[4], marginTop: spacing[4] },
-  sectionHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 8,
+  card: {
+    backgroundColor: colors.bgSurface,
+    borderRadius: radius.lg,
+    overflow: 'hidden',
   },
-  // 节标题字高（textVariants.sectionHeader）与两个动作按钮的文字量级
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: spacing[4],
+    paddingTop: spacing[4],
+    paddingBottom: spacing[3],
+  },
+  coverStack: { width: 70, height: 48, marginRight: spacing[3] },
+  stackCover: {
+    position: 'absolute',
+    width: 40,
+    height: 40,
+    borderRadius: radius.sm,
+  },
+  stackBack: { left: 24, top: 4 },
+  stackMid: { left: 12, top: 4 },
+  stackFront: { left: 0, top: 4 },
+  cardInfo: { flex: 1 },
+  radioTitle: { width: 72, height: 18, borderRadius: radius.sm },
+  radioMeta: { width: 96, height: 13, borderRadius: radius.xs, marginTop: 6 },
+  cardActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing[3],
+    paddingHorizontal: spacing[4],
+    paddingBottom: spacing[3],
+  },
+  playBtn: { width: 92, height: 32, borderRadius: radius.full },
+  shuffleBtn: { width: 64, height: 16, borderRadius: radius.xs },
+  cardRows: {
+    borderTopWidth: StyleSheet.hairlineWidth,
+    borderTopColor: colors.borderSubtle,
+  },
+  // 猜你喜欢（与真实页网格同源）
   titleBlock: { width: 72, height: 18, borderRadius: radius.sm },
-  headerActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
-  actionBlock: { width: 52, height: 14, borderRadius: radius.sm },
-  // 歌曲行的度量在 SongRowSkeleton/songRowMetrics；这里只留网格卡片
   gridTitle: { marginBottom: spacing[3] },
-  // 与真实页 styles.grid 同值（flex-wrap，gap 两轴都算）
   grid: { flexDirection: 'row', flexWrap: 'wrap', gap: GRID_GAP },
   gridCover: { borderRadius: GRID_CARD.coverRadius },
   gridName: {

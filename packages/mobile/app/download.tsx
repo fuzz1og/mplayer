@@ -1,25 +1,23 @@
-import { View, Text, StyleSheet, FlatList, Alert, Animated, Platform } from 'react-native';
+import { View, Text, StyleSheet, FlatList, Alert, Animated } from 'react-native';
 import { memo, useCallback, useEffect, useMemo } from 'react';
-import { router } from 'expo-router';
-import { Download, Trash2, ChevronRight } from 'lucide-react-native';
-import { Paths } from 'expo-file-system';
+import { router, Stack } from 'expo-router';
+import { StatusBar } from 'expo-status-bar';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { Download, Trash2 } from 'lucide-react-native';
 import type { Song } from '@mplayer/core';
-import { useDownloadStore, type DownloadItem } from '../../stores/downloadStore';
-import { useDownloadProgressStore } from '../../stores/downloadProgressStore';
-import { getLocalUri, removeDownloadedFile, pickDownloadDirectory } from '../../services/downloadService';
-import { playSong } from '../../services/audioPlayer';
-import { usePlayerStore } from '../../stores/playerStore';
-import {radius, shadow, spacing, textVariants} from '../../theme/tokens';
-import type { ThemeColors } from '../../theme/tokens';
-import { useTheme } from '../../theme/ThemeProvider';
-import ScalePress, { pressScale } from '../../components/ScalePress';
-import LazyCover from '../../components/LazyCover';
-import { useAnimatedBg } from '../../theme/AnimatedBg';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { topChromeHeight, bottomChromeHeight, LIST_TAIL_PADDING } from '../../components/chromeMetrics';
-
-import { useSettingsStore } from '../../stores/settingsStore';
-import EmptyState from '../../components/EmptyState';
+import { useDownloadStore, type DownloadItem } from '../stores/downloadStore';
+import { useDownloadProgressStore } from '../stores/downloadProgressStore';
+import { getLocalUri, removeDownloadedFile } from '../services/downloadService';
+import { playSong } from '../services/audioPlayer';
+import { usePlayerStore } from '../stores/playerStore';
+import { radius, spacing, textVariants } from '../theme/tokens';
+import type { ThemeColors } from '../theme/tokens';
+import { useTheme } from '../theme/ThemeProvider';
+import ScalePress, { pressScale } from '../components/ScalePress';
+import LazyCover from '../components/LazyCover';
+import { useAnimatedBg } from '../theme/AnimatedBg';
+import EmptyState from '../components/EmptyState';
+import BottomSafePlayerBar from '../components/BottomSafePlayerBar';
 
 const STATUS_LABELS: Record<string, string> = {
   downloading: '下载中',
@@ -27,22 +25,18 @@ const STATUS_LABELS: Record<string, string> = {
   error: '失败',
 };
 
-/** 路径展示用等宽字体：iOS 用 Menlo，Android 用系统 monospace（RN 不认 'monospace' 于 iOS） */
-const MONO_FONT = Platform.select({ ios: 'Menlo', android: 'monospace', default: undefined });
-
+/**
+ * 本地歌曲（2026-11-17 起从底部 tab 移入 Stack）：入口在「歌单」页的本地歌曲行，
+ * 保存位置移到设置页。原生 header 承担页名与返回，底部只保留迷你播放栏。
+ */
 export default function DownloadPage() {
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const animatedBg = useAnimatedBg();
-  const insets = useSafeAreaInsets();
   const styles = useMemo(() => makeStyles(colors), [colors]);
   const items = useDownloadStore((s) => s.items);
   const removeItem = useDownloadStore((s) => s.removeItem);
   const purgeFailed = useDownloadStore((s) => s.purgeFailed);
   const currentSong = usePlayerStore((s) => s.currentSong);
-  // ADR-0008：首次播放前迷你播放栏隐藏，让位随之缩小
-  const playerVisible = usePlayerStore((s) => !!(s.currentSong || s.hasPlayed));
-  const downloadDirUri = useSettingsStore((s) => s.downloadDirUri);
-  const authorized = Boolean(downloadDirUri);
 
   // 挂载时清除历史残留的失败条目（新失败已在下载服务里自动移除）
   useEffect(() => {
@@ -80,59 +74,46 @@ export default function DownloadPage() {
     ]);
   }, [removeItem]);
 
-  const handlePickDir = async () => {
-    try {
-      await pickDownloadDirectory();
-    } catch (e) {
-      Alert.alert('选择目录失败', e instanceof Error ? e.message : String(e));
-    }
-  };
-
   return (
     <Animated.View style={[styles.container, { backgroundColor: animatedBg }]}>
-      {/* 保存位置随内容滚动、从悬浮 TopBar 下穿过（M2）；静态放列表外会被 TopBar 盖住。
-          空列表时也不被居中：ListHeader 恒在 EmptyState 之上 */}
-      <FlatList
-        data={items}
-        keyExtractor={(item) => item.key}
-        contentContainerStyle={[
-          items.length === 0 ? styles.emptyContent : styles.listContent,
-          { paddingTop: topChromeHeight(insets.top), paddingBottom: bottomChromeHeight(insets.bottom, true, playerVisible) + LIST_TAIL_PADDING },
-        ]}
-        ListHeaderComponent={
-          <ScalePress style={styles.pathBox} pressScaleTo={pressScale.row} onPress={handlePickDir}>
-            <View style={styles.pathInfo}>
-              <Text style={styles.pathLabel}>保存位置</Text>
-              <Text style={styles.pathText} numberOfLines={2}>
-                {authorized ? '系统下载目录（已授权）' : `${Paths.document.uri}mplayer-downloads/`}
-              </Text>
-              <Text style={styles.pathHint}>
-                {authorized ? '点击可更换目录' : '点击选择系统下载目录；未授权时保存在应用私有目录'}
-              </Text>
-            </View>
-            <ChevronRight size={18} color={colors.textTertiary} />
-          </ScalePress>
-        }
-        ListEmptyComponent={
-          <EmptyState
-            icon={Download}
-            title="暂无下载任务"
-            subtitle="在歌曲更多菜单中点击「下载」，或先去搜索想听的歌"
-            actionLabel="去搜索歌曲"
-            onAction={() => router.push('/search')}
-          />
-        }
-        renderItem={({ item }) => (
-          <DownloadRow
-            item={item}
-            isCurrent={currentSong?.id === `local-${item.key}`}
-            styles={styles}
-            colors={colors}
-            onPlay={handlePlay}
-            onRemove={handleRemove}
-          />
-        )}
-      />
+      <SafeAreaView edges={[]} style={{ flex: 1 }}>
+        <StatusBar style={isDark ? 'light' : 'dark'} />
+        <Stack.Screen options={{
+          title: '本地歌曲',
+          headerShown: true,
+          headerStyle: { backgroundColor: colors.bgSurface },
+          headerTintColor: colors.textPrimary,
+          headerShadowVisible: false,
+        }} />
+        <FlatList
+          data={items}
+          keyExtractor={(item) => item.key}
+          contentContainerStyle={[
+            items.length === 0 ? styles.emptyContent : styles.listContent,
+            { paddingBottom: spacing[4] },
+          ]}
+          ListEmptyComponent={
+            <EmptyState
+              icon={Download}
+              title="暂无下载任务"
+              subtitle="在歌曲更多菜单中点击「下载」，或先去搜索想听的歌"
+              actionLabel="去搜索歌曲"
+              onAction={() => router.push('/search')}
+            />
+          }
+          renderItem={({ item }) => (
+            <DownloadRow
+              item={item}
+              isCurrent={currentSong?.id === `local-${item.key}`}
+              styles={styles}
+              colors={colors}
+              onPlay={handlePlay}
+              onRemove={handleRemove}
+            />
+          )}
+        />
+      </SafeAreaView>
+      <BottomSafePlayerBar />
     </Animated.View>
   );
 }
@@ -204,25 +185,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   // 主题切换平滑过渡（M3）：根部应用共享 Animated 背景色
   container: { flex: 1 },
   emptyContent: { flexGrow: 1, justifyContent: 'center' },
-  listContent: { paddingBottom: 24 },
-  /* 保存位置卡片 */
-  pathBox: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: colors.bgSurface,
-    borderRadius: radius.md,
-    ...shadow.sm,
-    marginHorizontal: spacing[4],
-    marginTop: spacing[3],
-    marginBottom: spacing[2],
-    paddingHorizontal: spacing[4],
-    paddingVertical: spacing[3],
-  },
-  pathInfo: { flex: 1, marginRight: spacing[2] },
-  pathLabel: { ...textVariants.caption, color: colors.textSecondary, marginBottom: spacing[1] },
-  // 有效 meta：路径/提示是用户要读的信息，用 textSecondary（tertiary 只留装饰）
-  pathText: { ...textVariants.caption, color: colors.textSecondary, fontFamily: MONO_FONT },
-  pathHint: { ...textVariants.micro, fontWeight: '400', color: colors.textSecondary, marginTop: spacing[1] },
+  listContent: {},
   /* 列表行（对齐 SongRow 惯例） */
   row: {
     backgroundColor: colors.bgSurface,
