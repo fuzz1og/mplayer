@@ -181,7 +181,7 @@ async function correctContainerName(
     // 没有 arrayBuffer()，实测读头静默失败 → 容器恒判 unknown（FLAC/M4A 从不会被改名）。
     const handle = file.open();
     try {
-      head = handle.readBytes(16);
+      head = await handle.readBytes(16);
     } finally {
       handle.close();
     }

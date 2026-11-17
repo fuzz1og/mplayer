@@ -16,8 +16,11 @@ import ChromeSurface from '../../components/ChromeSurface';
 import { usePlayerStore } from '../../stores/playerStore';
 import ScalePress from '../../components/ScalePress';
 
+// Expo Router 58：首屏锚点从 Tabs 的 initialRouteName prop 移到布局级 unstable_settings.anchor
+export const unstable_settings = { anchor: 'recommend' };
+
 // 底部 chrome 的 tab 清单（与 <Tabs.Screen> 路由一一对应；search 页由 href:null 隐藏）
-// 顺序对齐 master：推荐第一（initialRouteName="recommend"，首屏）
+// 顺序对齐 master：推荐第一（anchor='recommend'，首屏）
 const TABS: { name: string; href: Href; icon: LucideIcon; label: string }[] = [
   { name: 'recommend', href: '/recommend', icon: Flame, label: '推荐' },
   { name: 'index', href: '/', icon: Compass, label: '发现' },
@@ -103,7 +106,6 @@ export default function TabLayout() {
       {/* 内容区（悬浮 chrome 不再需要 blurTarget：毛玻璃已改为主题纯色+渐变） */}
       <View style={{ flex: 1 }}>
         <Tabs
-          initialRouteName="recommend"
           screenOptions={{
             headerShown: false,
           }}

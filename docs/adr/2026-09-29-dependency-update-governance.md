@@ -220,3 +220,16 @@ PR #727 / #728 仍 OPEN（audit-weekly 提供），合并后 lock 会变；**#66
 
 **残余不修的理由**：`expo-router@57` 仍依赖 CJS `query-string@7`，其 `decode-uri-component@^0.2.2` 被 `0.5.1` 的 ESM-only 入口挡住；直接顶版会在 Node/ Metro 的 `require()` 路径拿到命名空间对象而不是函数（本文「override 失效的三种成因」第 3 类）。干净且 CJS 可用的组合要等 `expo-router` 58 / SDK 58，不在本 PR 做跨 SDK 升级。
 
+## 2026-11-17 复核（#755：SDK 58 升级，3 high → 0）
+
+**复核时刻 2026-11-17（Asia/Hong_Kong）· 基线 `0406892` · node `v24.22.0` / npm `11.19.1`。**
+
+#755 把最后一条 high 链随 SDK 58 解除：
+
+- `expo` `57.0.32 → 58.0.25`、`expo-router` `57.0.30 → 58.0.32`、`react-native` `0.86.3 → 0.88.1`、`react`/`react-dom` `19.2.3 → 19.3.0`；全部 `expo-*` 按 SDK 58 `bundledNativeModules` 对齐，`npx expo install --check` 绿。
+- `expo-router@58` 已不依赖 `query-string`：`query-string` / `decode-uri-component` 整体移出 lock，`npm audit --package-lock-only` = **0**。
+- 根 `overrides.metro*` 由 `^0.84.6` 改为 **`0.87.1`（精确）**：`@expo/metro@58.0.0` 与 `@react-native/community-cli-plugin@0.88.1` 都要求 `0.87.1`；Expo versions API 的 `relatedPackages.metro = ^0.84.6` 不是这一层的权威，以包内声明为准。
+- 代码迁移：`Tabs initialRouteName` → `unstable_settings.anchor`（expo-router 58）；`FileHandle.readBytes()` → `await`（expo-file-system 58）；native-player media3 `1.9.0 → 1.9.1`（与 expo-audio@58.0.12 一致）；Android Gradle wrapper `9.3.1 → 9.4.1`、`build.gradle` 的 Kotlin 版本条件与 `app.json` 的 `newArchEnabled` 删除按 SDK 58 模板同步。AGP 9 另外要求 `proguard-android-optimize.txt` 与 `android.builtInKotlin=false` / `android.newDsl=false`；compileSdk/buildTools 37 由 AGP 在构建期自动安装。
+- 验证：`verify -- static` / `mobile` / `renderer` / `core` 绿；`main` 在 Node 22 下 248/248 绿（Node 24 有 Vitest worker teardown 误报，隔离文件复跑绿）；`expo export --platform android` 成功；`expo-doctor` 19/20（仅剩 CNG 反向设计性 warning）。
+- 未验：真机运行时（播放 / 更新 / 深链 / 通知）与 release 原生构建（发版窗口）。`File.info({md5:true})` 已 deprecated，后续迁 `file.digest('MD5')`。
+
