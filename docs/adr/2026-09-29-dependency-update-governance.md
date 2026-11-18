@@ -233,5 +233,5 @@ PR #727 / #728 仍 OPEN（audit-weekly 提供），合并后 lock 会变；**#66
 - 验证：`verify -- static` / `mobile` / `renderer` / `core` 绿；`main` 在 Node 22 下 248/248 绿（Node 24 有 Vitest worker teardown 误报，隔离文件复跑绿）；`expo export --platform android` 成功；`expo-doctor` 19/20（仅剩 CNG 反向设计性 warning）。
 - 真机冒烟（PK110 / Android 16 / dev build `1.9.3-dev` / expo-dev-client / Fabric）：启动无 `undefined is not a function`；播放后 `PlayerService` `isForeground=true`、媒体会话 `PLAYING`、通知通道 `music-playback-native`，退后台继续播放；`mplayer://settings` 打开设置；下载落盘 `.mp3` + `.lrc` 并提示完成；`anchor`/`backBehavior` 警告消失，从「发现」返回落在「推荐」。合并 #754 后封面页歌词预览左对齐与新发现页正常渲染。
 - 未验：release 原生构建与签名包（发版窗口的 `release.yml`）。`File.info({md5:true})` 已 deprecated，后续迁 `file.digest('MD5')`。
-- 2026-11-18 复查：`npm audit --package-lock-only` 变为 **83 high**，全部来自当天新发布的 [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)（`picomatch <=4.0.7`，ReDoS）。当前树内 `2.3.2` / `4.0.5` 均受影响，npm 上最新仍是 `4.0.7`，暂无修复版可顶；与本升级无关，等上游发版后按本文定点 override 处理。`query-string` 链仍为 0。
+- 2026-11-18 复查：`npm audit --package-lock-only` 变为 **83 high**，全部来自 [GHSA-fc5q-39xc-vjpf](https://github.com/advisories/GHSA-fc5q-39xc-vjpf)（`picomatch <=4.0.7`，ReDoS；公告 2026-10-19 发布，npm audit 数据源 11-18 才报告）。当前树内 `2.3.2` / `4.0.5` 均受影响，npm 上最新仍是 `4.0.7`，`first_patched_version` 为空、上游修复 PR 仍 open；与本升级无关，等上游发版后按本文定点 override 处理。`query-string` 链仍为 0。
 
