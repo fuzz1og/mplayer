@@ -106,6 +106,7 @@ export default function TabLayout() {
       {/* 内容区（悬浮 chrome 不再需要 blurTarget：毛玻璃已改为主题纯色+渐变） */}
       <View style={{ flex: 1 }}>
         <Tabs
+          backBehavior="initialRoute"
           screenOptions={{
             headerShown: false,
           }}
