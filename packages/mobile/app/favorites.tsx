@@ -1,6 +1,6 @@
 import { View, StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack } from 'expo-router';
+import { Stack, router } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
 import SongList from '../components/SongList';
 import type { SongListRow } from '../components/SongList';
@@ -60,7 +60,13 @@ export default function FavoritesPage() {
           headerShadowVisible: false,
         }} />
         {favorites.length === 0 ? (
-          <EmptyState icon={Heart} title="还没有收藏歌曲" />
+          <EmptyState
+            icon={Heart}
+            title="还没有收藏歌曲"
+            subtitle="在歌曲行点按心形即可收藏"
+            actionLabel="去发现音乐"
+            onAction={() => router.replace('/')}
+          />
         ) : (
           <SongList
             rows={rows}

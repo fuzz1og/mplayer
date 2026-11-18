@@ -10,7 +10,7 @@ import {
 import ScalePress from '../../../components/ScalePress';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Stack, useLocalSearchParams, router } from 'expo-router';
-import { ChevronRight, Disc3, Radio } from 'lucide-react-native';
+import { ChevronRight, CircleAlert, Disc3, Music2, Radio } from 'lucide-react-native';
 import {
   getArtistInfoRouted,
   getArtistRadiosRouted,
@@ -25,6 +25,8 @@ import LoadMoreFooter from '../../../components/LoadMoreFooter';
 import SongRow from '../../../components/SongRow';
 import CollapsingHero from '../../../components/CollapsingHero';
 import LazyCover from '../../../components/LazyCover';
+import EmptyState from '../../../components/EmptyState';
+import InlineError from '../../../components/InlineError';
 import BottomSafePlayerBar from '../../../components/BottomSafePlayerBar';
 import { usePlayerStore } from '../../../stores/playerStore';
 import { playSong } from '../../../services/audioPlayer';
@@ -54,6 +56,11 @@ export default function ArtistDetailPage() {
   const [loading, setLoading] = useState(true);
   const [loadingMore, setLoadingMore] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  /** 首屏歌曲失败（显示错误态 + 重试，而不是「暂无歌曲」） */
+  const [songsError, setSongsError] = useState(false);
+  /** 分页失败（页脚给重试；失败后不再被 onEndReached 自动重试） */
+  const [loadMoreError, setLoadMoreError] = useState(false);
+  const [songsReloadKey, setSongsReloadKey] = useState(0);
   const [albums, setAlbums] = useState<Album[]>([]);
   const [albumsTotal, setAlbumsTotal] = useState<number | null>(null);
   const [albumsError, setAlbumsError] = useState(false);
@@ -66,11 +73,15 @@ export default function ArtistDetailPage() {
   const displayName = artist?.name || name || '歌手';
   const displayPic = artist?.picUrl || pic || '';
 
-  const loadMore = useCallback(async () => {
+  const loadMore = useCallback(async (force = false) => {
     if (loadingMore || !hasMore || !id) return;
+    // 分页失败后 onEndReached 会反复触发；只有页脚重试（force）才重新发请求
+    if (loadMoreError && !force) return;
+    if (force) setLoadMoreError(false);
     setLoadingMore(true);
     try {
       const r = await getDirectClient('netease')!.getArtistSongs!(id, songs.length, 50);
+      setLoadMoreError(false);
       if (r.songs.length > 0) {
         setSongs(prev => [...prev, ...r.songs]);
         setHasMore(songs.length + r.songs.length < r.total);
@@ -79,10 +90,11 @@ export default function ArtistDetailPage() {
       }
     } catch (e) {
       console.error('[ArtistDetail] loadMore error:', e);
+      setLoadMoreError(true);
     } finally {
       setLoadingMore(false);
     }
-  }, [loadingMore, hasMore, id, songs.length]);
+  }, [loadingMore, hasMore, id, songs.length, loadMoreError]);
 
   useEffect(() => {
     if (!id) {
@@ -91,6 +103,8 @@ export default function ArtistDetailPage() {
     }
     let cancelled = false;
     setLoading(true);
+    setSongsError(false);
+    setLoadMoreError(false);
     (async () => {
       // 歌手信息按 id 校正（失败保留入口参数，不退化成「未知歌手」）
       void getArtistInfoRouted('netease', id).then((info) => {
@@ -104,12 +118,13 @@ export default function ArtistDetailPage() {
         setHasMore(songResult.songs.length < songResult.total);
       } catch (e) {
         console.error('[ArtistDetail] load error:', e);
+        if (!cancelled) setSongsError(true);
       } finally {
         if (!cancelled) setLoading(false);
       }
     })();
     return () => { cancelled = true; };
-  }, [id]);
+  }, [id, songsReloadKey]);
 
   // 专辑分区：只取**首屏一页**做预览；全量在同目录的 albums 时间线页里按 `more` 续页（#417 ①）
   useEffect(() => {
@@ -234,9 +249,7 @@ export default function ArtistDetailPage() {
         ) : null}
       </View>
       {albumsError ? (
-        <ScalePress style={styles.albumsRetry} onPress={() => setAlbumReloadKey(k => k + 1)}>
-          <Text style={styles.albumsRetryText}>加载失败，点此重试</Text>
-        </ScalePress>
+        <InlineError message="专辑加载失败" onRetry={() => setAlbumReloadKey(k => k + 1)} />
       ) : albums.length === 0 ? null : (
         // 横向 FlatList：只挂可视窗口附近的卡，不再一次把 100 张全挂上（#496）。
         // 不能给 getItemLayout —— 卡片高度随字号/主题变，算错比不给更糟。
@@ -268,9 +281,7 @@ export default function ArtistDetailPage() {
       ) : radiosError ? (
         <View style={styles.radiosSection}>
           <Text style={styles.albumsTitle}>电台</Text>
-          <ScalePress style={styles.albumsRetry} onPress={() => setRadiosReloadKey((key) => key + 1)}>
-            <Text style={styles.albumsRetryText}>{radiosError}</Text>
-          </ScalePress>
+          <InlineError message={radiosError} onRetry={() => setRadiosReloadKey((key) => key + 1)} />
         </View>
       ) : null}
     </View>
@@ -293,16 +304,33 @@ export default function ArtistDetailPage() {
           data={songs}
           keyExtractor={(item, i) => `${item.id}-${i}`}
           renderItem={renderItem}
-          onEndReached={loadMore}
+          onEndReached={() => void loadMore()}
           onEndReachedThreshold={0.5}
-          ListFooterComponent={<LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />}
+          ListFooterComponent={
+            loadMoreError ? (
+              <InlineError message="歌曲加载失败" onRetry={() => loadMore(true)} />
+            ) : (
+              <LoadMoreFooter loadingMore={loadingMore} hasMore={hasMore} hasData={songs.length > 0} />
+            )
+          }
           ListEmptyComponent={
             loading ? (
               <SongListSkeleton rows={6} showSource />
+            ) : songsError ? (
+              <EmptyState
+                variant="embedded"
+                icon={CircleAlert}
+                iconColor={colors.dangerText}
+                title="歌曲加载失败"
+                actionLabel="重试"
+                onAction={() => setSongsReloadKey((key) => key + 1)}
+              />
             ) : (
-              <View style={styles.empty}>
-                <Text style={styles.emptyText}>暂无歌曲</Text>
-              </View>
+              <EmptyState
+                variant="embedded"
+                icon={Music2}
+                title="暂无歌曲"
+              />
             )
           }
           listHeader={id ? albumsHeader : null}
@@ -326,16 +354,9 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     marginBottom: spacing[3],
   },
   albumsTitle: { ...textVariants.body, fontWeight: typography.weights.semibold, color: colors.textPrimary },
-  albumsMore: { flexDirection: 'row', alignItems: 'center', gap: 2 },
-  albumsMoreText: { ...textVariants.footnote, color: colors.textTertiary },
-  albumsRetry: {
-    alignSelf: 'flex-start',
-    paddingVertical: spacing[2],
-    paddingHorizontal: spacing[4],
-    borderRadius: radius.full,
-    backgroundColor: colors.bgSurface,
-  },
-  albumsRetryText: { ...textVariants.footnote, color: colors.textSecondary },
+  albumsMore: { flexDirection: 'row', alignItems: 'center', gap: spacing[1] },
+  // 可点的「更多」是有效正文，不能用低对比 decorative 色
+  albumsMoreText: { ...textVariants.footnote, color: colors.textSecondary },
   albumCard: {
     width: 116,
     backgroundColor: colors.bgSurface,
@@ -346,9 +367,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   albumCover: { width: 100, height: 100, borderRadius: radius.sm, backgroundColor: colors.bgHover },
   albumCoverFallback: { justifyContent: 'center', alignItems: 'center' },
-  albumName: { ...textVariants.caption, color: colors.textTertiary, marginTop: 6 },
-  radioMeta: { ...textVariants.caption, color: colors.textTertiary, marginTop: 2 },
+  // 专辑名/主播名是有效 meta：textSecondary；textTertiary 只留占位图标
+  albumName: { ...textVariants.caption, color: colors.textSecondary, marginTop: spacing[1] },
+  radioMeta: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
   avatarFallback: { color: colors.textInverse, fontSize: 56, fontWeight: typography.weights.bold },
-  empty: { paddingVertical: 60, alignItems: 'center' },
-  emptyText: { ...textVariants.callout, color: colors.textSecondary },
 });

@@ -4,6 +4,8 @@
  * 推导（见各文件引用处）。
  */
 
+import { textVariants } from '../theme/tokens';
+
 /* ── TopBar 固定部分 ─────────────────────────────── */
 
 /** TopBar container 垂直 padding（TopBar.tsx container paddingVertical 引用此值） */
@@ -23,7 +25,8 @@ export const PLAYER_BAR_HEIGHT = 60;
 /** tab 栏内容高度组成（(tabs)/_layout.tsx AnimatedTabBar 引用，不再本地双写） */
 export const TAB_PAD_TOP = 6;
 export const TAB_ICON_SIZE = 22;
-export const TAB_LABEL_HEIGHT = 15; // 标签字号 11（micro 同级；带 lineHeight 成对样式不套变体）+ marginTop 2
+/** 标签行高 = micro 变体行高 + 与图标的 2pt 间距（字号/字重一律走 textVariants.micro） */
+export const TAB_LABEL_HEIGHT = textVariants.micro.lineHeight + 2;
 export const TAB_PAD_BOTTOM = 24;
 
 /** tab 栏安全区抵扣：底栏不贴满 insets.bottom，留 8pt 呼吸（公式中的 -8） */

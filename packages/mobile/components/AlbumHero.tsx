@@ -7,8 +7,6 @@
 import React, { useCallback, useMemo } from 'react';
 import { CircleAlert, Disc3, Music2 } from 'lucide-react-native';
 import type { Album, Song } from '@mplayer/core';
-import { radius, spacing, textVariants, typography } from '../theme/tokens';
-import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 import { usePlayerStore } from '../stores/playerStore';
 import { playSong } from '../services/audioPlayer';
@@ -16,8 +14,6 @@ import CollapsingHero from './CollapsingHero';
 import SongRow from './SongRow';
 import SongListSkeleton from './SongListSkeleton';
 import EmptyState from './EmptyState';
-import ScalePress from './ScalePress';
-import { StyleSheet, Text } from 'react-native';
 
 export type AlbumListState = 'loading' | 'ready' | 'error' | 'empty';
 
@@ -49,7 +45,6 @@ export default function AlbumHero({
   fallbackName, fallbackPic, fallbackArtist,
 }: Props) {
   const { colors } = useTheme();
-  const styles = useMemo(() => makeStyles(colors), [colors]);
 
   const title = album?.name || fallbackName;
   const cover = album?.picUrl || fallbackPic;
@@ -93,18 +88,16 @@ export default function AlbumHero({
       return (
         <EmptyState
           icon={CircleAlert}
+          iconColor={colors.dangerText}
           title={errorMessage || '专辑加载失败'}
           subtitle="稍后重试，或先播放其他内容"
-          action={(
-            <ScalePress style={styles.retryBtn} onPress={onRetry}>
-              <Text style={styles.retryText}>重试</Text>
-            </ScalePress>
-          )}
+          actionLabel="重试"
+          onAction={onRetry}
         />
       );
     }
     return <EmptyState icon={Music2} title="暂无歌曲" subtitle="这张专辑里没有可展示的曲目" />;
-  }, [state, errorMessage, onRetry, styles]);
+  }, [state, errorMessage, onRetry, colors.dangerText]);
 
   return (
     <CollapsingHero
@@ -126,12 +119,3 @@ export default function AlbumHero({
   );
 }
 
-const makeStyles = (colors: ThemeColors) => StyleSheet.create({
-  retryBtn: {
-    backgroundColor: colors.accent,
-    paddingHorizontal: spacing[5],
-    paddingVertical: spacing[2],
-    borderRadius: radius.full,
-  },
-  retryText: { ...textVariants.callout, color: colors.textInverse, fontWeight: typography.weights.semibold },
-});

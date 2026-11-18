@@ -1,5 +1,5 @@
 /**
- * MPlayer mobile 设计系统 — desktop 同款浅色蓝调 token 体系（#173 起支持深色）
+ * MPlayer mobile 设计系统 — 沿用桌面同源蓝色双主题（#173）；2026-11-16 只收敛字号层级
  * 使用方式（组件内取色一律走 useTheme，禁止再静态 import colors）：const { colors } = 
  * useTheme();const styles = useMemo(() => makeStyles(colors), [colors]);
  */
@@ -150,6 +150,16 @@ export const playerBackground: Record<'dark' | 'light', [string, string, string]
   light: ['#D5DAE3', '#E1E5EB', '#ECEEF3'],
 };
 
+/**
+ * 发现页 hero 固定深色遮罩（不随主题）：封面颜色不可控，浅色主题也不能用浅遮罩，
+ * 否则白字对比度随机失效；半透明保留封面下缘的氛围光。
+ */
+export const heroScrim: [string, string, string] = [
+  'rgba(8, 8, 20, 0)',
+  'rgba(8, 8, 20, 0.58)',
+  'rgba(8, 8, 20, 0.88)',
+];
+
 /** 间距 — 8px 网格（与 desktop --space-* 一致） */
 export const spacing = {
   0: 0,
@@ -252,13 +262,13 @@ export const typography = {
  */
 export const textVariants = {
   /** 页面大标题（字距跟字号走：大字收紧，apple-design §15） */
-  largeTitle: { fontSize: 22, fontWeight: '700', letterSpacing: -0.5, lineHeight: 26 },
+  largeTitle: { fontSize: 24, fontWeight: '700', letterSpacing: -0.6, lineHeight: 29 },
   /** 全屏播放器歌曲名 */
   titleLg: { fontSize: 20, fontWeight: '700', letterSpacing: -0.4, lineHeight: 24 },
   /** 弹层/对话框标题 */
   title: { fontSize: 17, fontWeight: '700', letterSpacing: -0.2, lineHeight: 21 },
   /** 区块标题 */
-  sectionHeader: { fontSize: 16, fontWeight: '700', lineHeight: 20 },
+  sectionHeader: { fontSize: 17, fontWeight: '700', letterSpacing: -0.2, lineHeight: 22 },
   /** 正文级说明/空态文案 */
   callout: { fontSize: 16, fontWeight: '400', lineHeight: 21 },
   /** 列表主行文字 */
@@ -270,7 +280,7 @@ export const textVariants = {
   /** 副行文字（歌手名/时间） */
   caption: { fontSize: 12, fontWeight: '400', lineHeight: 16 },
   /** 徽章/角标 */
-  micro: { fontSize: 11, fontWeight: '600', lineHeight: 14 },
+  micro: { fontSize: 10, fontWeight: '600', lineHeight: 13 },
   /** iOS 设置页 Inset Grouped 三档层级（17/15/13，见 docs/specs/2026-08-26-mobile-ios-design-guide.md） */
   settingsPrimary: { fontSize: 17, fontWeight: '400', lineHeight: 22 },
   settingsSecondary: { fontSize: 15, fontWeight: '400', lineHeight: 20 },

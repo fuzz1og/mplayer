@@ -4,6 +4,7 @@ import { useTheme } from '../theme/ThemeProvider';
 import { useSettingsStyles } from '../components/settings/settingsStyles';
 import AppearanceSection from '../components/settings/AppearanceSection';
 import PlaybackSection from '../components/settings/PlaybackSection';
+import DownloadSettingsSection from '../components/settings/DownloadSettingsSection';
 import DirectStatusSection from '../components/settings/DirectStatusSection';
 import Tier3Section from '../components/settings/Tier3Section';
 import DeveloperModeSection from '../components/settings/DeveloperModeSection';
@@ -39,6 +40,7 @@ export default function SettingsPage() {
       >
         <AppearanceSection />
         <PlaybackSection />
+        <DownloadSettingsSection />
         <DirectStatusSection />
         <Tier3Section />
         <DeveloperModeSection />

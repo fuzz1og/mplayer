@@ -62,6 +62,8 @@ export default function PlayerBar() {
       style={[styles.container, !currentSong && styles.containerEmpty]}
       onPress={() => currentSong && setShowPlayer(true)}
       disabled={!currentSong}
+      accessibilityRole={currentSong ? 'button' : undefined}
+      accessibilityLabel={currentSong ? `打开播放器：${currentSong.name}，${currentSong.artist}` : undefined}
     >
       {/* 专辑封面 */}
       <View style={styles.coverWrap}>
@@ -88,7 +90,8 @@ export default function PlayerBar() {
           <ScalePress
             onPress={(e) => { e?.stopPropagation(); skipPrev(); }}
             style={styles.btn}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 2 }}
+            hitSlop={{ top: 10, bottom: 10, left: 10, right: 6 }}
+            accessibilityLabel="上一首"
           >
             <SkipBack size={24} color={colors.textSecondary} />
           </ScalePress>
@@ -97,6 +100,8 @@ export default function PlayerBar() {
             style={styles.btn}
             hitSlop={{ top: 4, bottom: 4 }}
             disabled={preparing}
+            accessibilityLabel={preparing ? '正在准备播放' : isPlaying ? '暂停' : '播放'}
+            accessibilityState={{ disabled: preparing, busy: preparing }}
           >
             {preparing ? (
               <Animated.View style={{ transform: [{ rotate }] }}>
@@ -111,7 +116,8 @@ export default function PlayerBar() {
           <ScalePress
             onPress={(e) => { e?.stopPropagation(); skipNext(); }}
             style={styles.btn}
-            hitSlop={{ top: 6, bottom: 6, left: 2, right: 6 }}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 10 }}
+            accessibilityLabel="下一首"
           >
             <SkipForward size={24} color={colors.textSecondary} />
           </ScalePress>
@@ -121,7 +127,8 @@ export default function PlayerBar() {
               setShowQueue(true);
             }}
             style={styles.btn}
-            hitSlop={{ top: 6, bottom: 6, left: 6, right: 12 }}
+            hitSlop={{ top: 10, bottom: 10, left: 6, right: 12 }}
+            accessibilityLabel="播放队列"
           >
             <ListMusic size={24} color={colors.textSecondary} />
           </ScalePress>
@@ -206,5 +213,5 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   queueItemName: { ...textVariants.body, fontWeight: '400', color: colors.textPrimary },
   queueItemActive: { color: colors.accent },
   queueItemArtist: { ...textVariants.caption, color: colors.textSecondary, marginTop: 2 },
-  emptyText: { ...textVariants.footnote, color: colors.textTertiary, textAlign: 'center', marginTop: spacing[10] },
+  emptyText: { ...textVariants.footnote, color: colors.textSecondary, textAlign: 'center', marginTop: spacing[10] },
 });

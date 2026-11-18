@@ -1,6 +1,6 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
-import {opacity, radius, shadow, spacing, textVariants} from '../../theme/tokens';
+import {opacity, radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
 
@@ -23,32 +23,6 @@ const makeSettingsStyles = (colors: ThemeColors) => StyleSheet.create({
   segmentCell: {
     paddingHorizontal: spacing[4],
     paddingVertical: 10,
-  },
-  /* iOS 13+ 分段控件默认：极浅灰底（segmentTrack）+ 选中段白胶囊浮起 */
-  segmentGroup: {
-    flexDirection: 'row',
-    backgroundColor: colors.segmentTrack,
-    borderRadius: radius.sm,
-    padding: 2,
-  },
-  segmentBtn: {
-    flex: 1,
-    paddingVertical: 8,
-    borderRadius: radius.xs,
-    alignItems: 'center',
-  },
-  segmentBtnActive: {
-    backgroundColor: colors.bgElevated,
-    ...shadow.xs,
-  },
-  segmentBtnText: {
-    color: colors.textSecondary,
-    ...textVariants.subhead,
-    fontWeight: '500',
-  },
-  segmentBtnTextActive: {
-    color: colors.accent,
-    fontWeight: '600',
   },
   section: {
     paddingHorizontal: spacing[4],
@@ -217,12 +191,12 @@ const makeSettingsStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   diagReason: {
     ...textVariants.settingsTertiary,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
   diagSources: {
     ...textVariants.settingsTertiary,
-    color: colors.textTertiary,
+    color: colors.textSecondary,
     marginTop: 2,
   },
 

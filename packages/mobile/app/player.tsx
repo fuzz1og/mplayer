@@ -1,8 +1,8 @@
 import { useMemo } from 'react';
 import { StyleSheet } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { router } from 'expo-router';
 import PlayerOverlay from '../components/PlayerOverlay';
+import { goBackOrHome } from '../utils/navigation';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
 
@@ -12,7 +12,7 @@ export default function PlayerPage() {
 
   return (
     <SafeAreaView style={styles.container} edges={['top', 'bottom']}>
-      <PlayerOverlay onClose={() => router.back()} />
+      <PlayerOverlay onClose={goBackOrHome} />
     </SafeAreaView>
   );
 }

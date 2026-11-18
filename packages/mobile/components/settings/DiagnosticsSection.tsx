@@ -147,7 +147,7 @@ export default function DiagnosticsSection() {
           disabled={recentLogs.length === 0}
         >
           <Trash2 size={18} color={colors.danger} style={styles.btnIcon} />
-          <Text style={[styles.actionRowText, { color: colors.danger }]}>清空日志</Text>
+          <Text style={[styles.actionRowText, { color: colors.dangerText }]}>清空日志</Text>
         </ScalePress>
       </View>
 
@@ -212,7 +212,7 @@ export default function DiagnosticsSection() {
           disabled={!hasTraces}
         >
           <Trash2 size={18} color={colors.danger} style={styles.btnIcon} />
-          <Text style={[styles.actionRowText, { color: colors.danger }]}>清空</Text>
+          <Text style={[styles.actionRowText, { color: colors.dangerText }]}>清空</Text>
         </ScalePress>
       </View>
       <Text style={styles.sectionFootnote}>

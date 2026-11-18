@@ -7,10 +7,11 @@ import {
   TextInput,
   Alert,
   Platform,
+  KeyboardAvoidingView,
 } from 'react-native';
 import type { ListRenderItem } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { Stack, useLocalSearchParams } from 'expo-router';
+import { router, Stack, useLocalSearchParams } from 'expo-router';
 import {
   formatPlayCount,
   getToplistDetailRouted,
@@ -19,12 +20,13 @@ import {
   TOPLIST_SOURCE_IDS,
 } from '@mplayer/core';
 import type { Song, SourceKey, ToplistDetail } from '@mplayer/core';
-import { Download, Loader2 } from 'lucide-react-native';
+import { CircleAlert, Download, Loader2 } from 'lucide-react-native';
 import CollapsingHero from '../components/CollapsingHero';
 import CoverFallback from '../components/CoverFallback';
 import HeroSkeleton from '../components/HeroSkeleton';
 import SongRow from '../components/SongRow';
 import BottomSheet from '../components/BottomSheet';
+import EmptyState from '../components/EmptyState';
 import ScalePress from '../components/ScalePress';
 import { createMobilePlaylistWriter } from '../services/playlistExport';
 
@@ -195,7 +197,13 @@ export default function HotlistPage() {
               headerShadowVisible: false,
             }}
           />
-          <Text style={styles.errorText}>未知榜单类型</Text>
+          <EmptyState
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="未知榜单类型"
+            actionLabel="返回"
+            onAction={() => router.back()}
+          />
         </SafeAreaView>
         <BottomSafePlayerBar />
       </View>
@@ -228,7 +236,8 @@ export default function HotlistPage() {
               style={styles.navAction}
               onPress={openSaveSheet}
               disabled={songs.length === 0}
-              hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+              hitSlop={{ top: 4, bottom: 4, left: 4, right: 4 }}
+              accessibilityLabel="保存全部到新歌单"
             >
               <Download size={22} color={colors.textPrimary} />
             </ScalePress>
@@ -248,6 +257,7 @@ export default function HotlistPage() {
 
       {/* 保存全部到新歌单（#493）：确认弹层写清榜单名与曲目数，名称可改 */}
       <BottomSheet visible={saveVisible} onClose={closeSaveSheet}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
         <View style={styles.saveBody}>
           <Text style={styles.saveTitle}>保存全部到新歌单</Text>
           <Text style={styles.saveSub}>
@@ -262,11 +272,13 @@ export default function HotlistPage() {
             returnKeyType="done"
             onSubmitEditing={handleSaveAll}
             autoCorrect={false}
+            accessibilityLabel="新歌单名称"
           />
           <View style={styles.saveActions}>
             <ScalePress
               style={styles.saveCancel}
               onPress={closeSaveSheet}
+              accessibilityLabel="取消保存"
             >
               <Text style={styles.saveCancelText}>取消</Text>
             </ScalePress>
@@ -274,6 +286,7 @@ export default function HotlistPage() {
               style={[styles.saveConfirm, (!saveName.trim() || saving) && { opacity: opacity.disabled }]}
               onPress={handleSaveAll}
               disabled={!saveName.trim() || saving}
+              accessibilityLabel={`保存 ${songs.length} 首到新歌单`}
             >
               {saving
                 ? <Loader2 size={18} color={colors.textInverse} />
@@ -281,6 +294,7 @@ export default function HotlistPage() {
             </ScalePress>
           </View>
         </View>
+        </KeyboardAvoidingView>
       </BottomSheet>
       <BottomSafePlayerBar />
     </View>
@@ -289,7 +303,6 @@ export default function HotlistPage() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  errorText: { color: colors.textSecondary, ...textVariants.callout, textAlign: 'center', marginTop: spacing[10] },
   // 与 CollapsingHero 的返回钮同规格（40×40 圆形热区），保证折叠后的导航栏左右对称
   navAction: {
     width: 40,
@@ -327,7 +340,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveCancel: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -339,7 +352,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   saveConfirm: {
     flex: 1,
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.accent,
     alignItems: 'center',

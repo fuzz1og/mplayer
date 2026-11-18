@@ -37,7 +37,7 @@ export default function PlaylistSelectionBar({
       >
         <Text style={styles.action}>完成</Text>
       </ScalePress>
-      <Text style={styles.count} numberOfLines={1}>已选 {count} 项</Text>
+      <Text style={styles.count} numberOfLines={1} accessibilityLiveRegion="polite">已选 {count} 项</Text>
       <ScalePress
         style={[styles.side, styles.sideRight]}
         onPress={onToggleAll}
@@ -65,5 +65,12 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   side: { minWidth: SIDE_MIN_WIDTH, justifyContent: 'center' },
   sideRight: { alignItems: 'flex-end' },
   action: { ...textVariants.footnote, fontWeight: '600', color: colors.accent },
-  count: { flex: 1, textAlign: 'center', ...textVariants.footnote, color: colors.textSecondary },
+  count: {
+    flex: 1,
+    textAlign: 'center',
+    ...textVariants.footnote,
+    color: colors.textSecondary,
+    // 计数变化时数字不跳列
+    fontVariant: ['tabular-nums'],
+  },
 });

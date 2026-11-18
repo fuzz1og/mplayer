@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import {
-  Modal, View, StyleSheet, Pressable, Animated,
+  Modal, View, StyleSheet, Pressable, Animated, Keyboard,
   useWindowDimensions,
   type StyleProp, type ViewStyle,
 } from 'react-native';
@@ -145,9 +145,14 @@ export default function BottomSheet({
     } else if (mountedRef.current) {
       setMounted(false); // 内部拖拽关闭已播完退场：直接卸载
     }
+    // 关闭（含外部 visible=false）时收起键盘：遮罩/面板退场期间键盘残留会盖住页面
+    if (!visible) Keyboard.dismiss();
   }, [visible]);
 
-  const requestClose = (velocityY = 0) => playExit(velocityY, () => onCloseRef.current());
+  const requestClose = (velocityY = 0) => {
+    Keyboard.dismiss();
+    playExit(velocityY, () => onCloseRef.current());
+  };
 
   // ── 把手区拖拽关闭：仅 grabberZone 接管，物理在 gestures/dragSession（与 PlayerOverlay 共用）──
   const panHandlers = useDragToDismiss({

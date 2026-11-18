@@ -8,14 +8,18 @@ import {
   Modal,
   TextInput,
   BackHandler,
+  Keyboard,
+  KeyboardAvoidingView,
+  Platform,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import ScalePress from '../../components/ScalePress';
 import { CheckSquare, CircleAlert, MoreVertical, Music2, Pencil, Trash2, Upload } from 'lucide-react-native';
-import { useLocalSearchParams, Stack, router, useFocusEffect } from 'expo-router';
+import { useLocalSearchParams, Stack, useFocusEffect, router } from 'expo-router';
 import { usePlaylistStore } from '../../stores/playlistStore';
 import { useFavoriteStore } from '../../stores/favoriteStore';
 import BottomSafePlayerBar from '../../components/BottomSafePlayerBar';
+import EmptyState from '../../components/EmptyState';
 import PlaylistHero from '../../components/PlaylistHero';
 import PlaylistBatchBar from '../../components/PlaylistBatchBar';
 import AddToPlaylistModal from '../../components/AddToPlaylistModal';
@@ -36,6 +40,7 @@ import type { Song } from '@mplayer/core';
 import {opacity, radius, spacing, textVariants} from '../../theme/tokens';
 import type { ThemeColors } from '../../theme/tokens';
 import { useTheme } from '../../theme/ThemeProvider';
+import { goBackOrHome } from '../../utils/navigation';
 
 export default function PlaylistDetailPage() {
   const { colors } = useTheme();
@@ -87,11 +92,17 @@ export default function PlaylistDetailPage() {
     setRenameModalVisible(true);
   }, [playlist]);
 
+  const closeRenameModal = useCallback(() => {
+    Keyboard.dismiss();
+    setRenameValue('');
+    setRenameModalVisible(false);
+  }, []);
+
   const handleRenameConfirm = () => {
     const trimmed = renameValue.trim();
     if (!trimmed || !playlist) return;
     renamePlaylist(playlist.id, trimmed);
-    setRenameModalVisible(false);
+    closeRenameModal();
   };
 
   // 删除：二次确认 → 删 → 回歌单列表（列表页长按删除保留，见 #382）
@@ -106,7 +117,7 @@ export default function PlaylistDetailPage() {
         onPress: () => {
           setDeleting(true);
           deletePlaylist(playlist.id);
-          router.back();
+          goBackOrHome();
         },
       },
     ]);
@@ -232,10 +243,14 @@ export default function PlaylistDetailPage() {
               headerShadowVisible: false,
             }}
           />
-          <View style={styles.empty}>
-            <CircleAlert size={48} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>歌单不存在</Text>
-          </View>
+          <EmptyState
+            icon={CircleAlert}
+            iconColor={colors.dangerText}
+            title="歌单不存在"
+            subtitle="链接可能已失效"
+            actionLabel="返回"
+            onAction={() => goBackOrHome()}
+          />
         </SafeAreaView>
         <BottomSafePlayerBar />
       </View>
@@ -246,7 +261,8 @@ export default function PlaylistDetailPage() {
     <ScalePress
       style={styles.moreBtn}
       onPress={() => setActionsVisible(true)}
-      hitSlop={{ left: 8, right: 8, top: 8, bottom: 8 }}
+      hitSlop={{ left: 4, right: 4, top: 4, bottom: 4 }}
+      accessibilityLabel="更多歌单操作"
     >
       <MoreVertical size={22} color={colors.textSecondary} />
     </ScalePress>
@@ -275,10 +291,13 @@ export default function PlaylistDetailPage() {
         />
 
         {isEmpty ? (
-          <View style={styles.empty}>
-            <Music2 size={64} color={colors.textTertiary} />
-            <Text style={styles.emptyText}>歌单是空的</Text>
-          </View>
+          <EmptyState
+            icon={Music2}
+            title="歌单是空的"
+            subtitle="从发现页或搜索里添加歌曲"
+            actionLabel="去发现音乐"
+            onAction={() => router.replace('/')}
+          />
         ) : (
           <PlaylistHero
             playlist={playlist}
@@ -300,47 +319,54 @@ export default function PlaylistDetailPage() {
           animationType="fade"
           statusBarTranslucent
           navigationBarTranslucent
-          onRequestClose={() => setRenameModalVisible(false)}
+          onRequestClose={closeRenameModal}
         >
           <Pressable
             style={styles.modalOverlay}
-            onPress={() => setRenameModalVisible(false)}
+            onPress={closeRenameModal}
           >
-            <Pressable
-              style={styles.modalContent}
-              onPress={() => {}}
+            <KeyboardAvoidingView
+              behavior={Platform.OS === 'ios' ? 'padding' : undefined}
+              style={styles.modalKav}
             >
-              <Text style={styles.modalTitle}>重命名歌单</Text>
-              <TextInput
-                style={styles.modalInput}
-                placeholder="输入歌单名称"
-                placeholderTextColor={colors.inputPlaceholder}
-                value={renameValue}
-                onChangeText={setRenameValue}
-                autoFocus
-              />
-              <View style={styles.modalActions}>
-                <ScalePress
-                  style={styles.cancelBtn}
-                  onPress={() => {
-                    setRenameValue('');
-                    setRenameModalVisible(false);
-                  }}
-                >
-                  <Text style={styles.cancelText}>取消</Text>
-                </ScalePress>
-                <ScalePress
-                  style={[
-                    styles.confirmBtn,
-                    !renameValue.trim() && { opacity: opacity.disabled },
-                  ]}
-                  onPress={handleRenameConfirm}
-                  disabled={!renameValue.trim()}
-                >
-                  <Text style={styles.confirmText}>确认</Text>
-                </ScalePress>
-              </View>
-            </Pressable>
+              <Pressable
+                style={styles.modalContent}
+                onPress={() => {}}
+              >
+                <Text style={styles.modalTitle}>重命名歌单</Text>
+                <TextInput
+                  style={styles.modalInput}
+                  placeholder="输入歌单名称"
+                  placeholderTextColor={colors.inputPlaceholder}
+                  value={renameValue}
+                  onChangeText={setRenameValue}
+                  autoFocus
+                  returnKeyType="done"
+                  onSubmitEditing={handleRenameConfirm}
+                  accessibilityLabel="歌单名称"
+                />
+                <View style={styles.modalActions}>
+                  <ScalePress
+                    style={styles.cancelBtn}
+                    onPress={closeRenameModal}
+                    accessibilityLabel="取消重命名"
+                  >
+                    <Text style={styles.cancelText}>取消</Text>
+                  </ScalePress>
+                  <ScalePress
+                    style={[
+                      styles.confirmBtn,
+                      !renameValue.trim() && { opacity: opacity.disabled },
+                    ]}
+                    onPress={handleRenameConfirm}
+                    disabled={!renameValue.trim()}
+                    accessibilityLabel="确认重命名"
+                  >
+                    <Text style={styles.confirmText}>确认</Text>
+                  </ScalePress>
+                </View>
+              </Pressable>
+            </KeyboardAvoidingView>
           </Pressable>
         </Modal>
 
@@ -416,15 +442,9 @@ export default function PlaylistDetailPage() {
 
 const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   container: { flex: 1, backgroundColor: colors.bgBase },
-  empty: {
-    flex: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-    paddingBottom: 80,
-  },
-  emptyText: { ...textVariants.callout, color: colors.textSecondary, marginTop: spacing[3] },
 
-  moreBtn: { marginRight: spacing[2] },
+  // 图标钮在 CollapsingHero 的 navRight 胶囊内，不再额外留右距
+  moreBtn: { alignItems: 'center', justifyContent: 'center' },
 
   // 「更多」操作面板
   actionsBody: { paddingHorizontal: spacing[5], paddingBottom: spacing[5] },
@@ -438,7 +458,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   actionItem: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderBottomWidth: StyleSheet.hairlineWidth,
     borderBottomColor: colors.borderSubtle,
   },
@@ -447,7 +467,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   actionLabelDanger: { color: colors.dangerText },
   actionCancel: {
     marginTop: spacing[3],
-    paddingVertical: 14,
+    paddingVertical: spacing[3],
     borderRadius: radius.md,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -460,6 +480,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  modalKav: { width: '100%', alignItems: 'center' },
   modalContent: {
     backgroundColor: colors.bgSurface,
     borderRadius: radius.lg,
@@ -476,8 +497,8 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   modalInput: {
     backgroundColor: colors.inputBg,
     borderRadius: radius.sm,
-    paddingHorizontal: 14,
-    paddingVertical: 10,
+    paddingHorizontal: spacing[3],
+    paddingVertical: spacing[3],
     ...textVariants.body,
     fontWeight: '400',
     color: colors.textPrimary,
@@ -489,7 +510,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   },
   cancelBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
     borderRadius: radius.sm,
     backgroundColor: colors.bgHover,
     alignItems: 'center',
@@ -497,7 +518,7 @@ const makeStyles = (colors: ThemeColors) => StyleSheet.create({
   cancelText: { ...textVariants.body, fontWeight: '400', color: colors.textSecondary },
   confirmBtn: {
     flex: 1,
-    paddingVertical: 10,
+    paddingVertical: spacing[3],
     borderRadius: radius.sm,
     backgroundColor: colors.accent,
     alignItems: 'center',

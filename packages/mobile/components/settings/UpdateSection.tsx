@@ -294,7 +294,7 @@ export default function UpdateSection() {
       {updateState === 'error' && (
         <View style={[styles.row, styles.rowSep]}>
           <CircleX size={20} color={colors.danger} style={{ marginRight: 8 }} />
-          <Text style={{ ...textVariants.settingsPrimary, color: colors.danger }}>操作失败，请检查网络后重试</Text>
+          <Text style={{ ...textVariants.settingsPrimary, color: colors.dangerText }}>操作失败，请检查网络后重试</Text>
         </View>
       )}
       {updateState === 'downloading' && (
@@ -322,7 +322,7 @@ export default function UpdateSection() {
       )}
       {updateState === 'integrity-failed' && (
         <View style={[styles.groupPad, styles.rowSep]}>
-          <Text style={{ ...textVariants.settingsPrimary, color: colors.danger }}>{failureText || '更新校验未通过'}</Text>
+          <Text style={{ ...textVariants.settingsPrimary, color: colors.dangerText }}>{failureText || '更新校验未通过'}</Text>
           <Text style={styles.releaseNotes}>
             {failureKind !== 'corrupt'
               ? '未取得可用的校验值，可改用浏览器下载（旧方式）；或在上方选另一个通道后重走全流程。'
