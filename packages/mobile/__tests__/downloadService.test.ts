@@ -76,7 +76,7 @@ vi.mock('expo-file-system', () => {
       const data = Uint8Array.from(fsMocks.headerBytes);
       let pos = 0;
       return {
-        readBytes: (len: number) => {
+        readBytes: async (len: number) => {
           const out = data.slice(pos, pos + len);
           pos += out.length;
           return out;

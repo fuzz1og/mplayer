@@ -24,7 +24,7 @@ GitHub 官方唯一给出的分组示例也落在低风险层：`you can combine
    官方保证在 CI 下非零退出（文档 `It exits with non-zero in Continuous Integration (CI).` + 源码 `Log.exit(..., 1)` 双证）。实测在坏掉的 master 上输出 `react-native@0.87.1 - expected version: 0.86.3` 等 9 条并 **exit 1**，**秒级、零 Gradle、零 keystore**。
 3. **机器人继续负责其余依赖**：保留 `prod-patch` 分组（production 只合 patch）、`dev-non-major` 分组、分级 `cooldown`。
 4. **生态耦合集的升级动作固定为 `npx expo install --fix`**（或随 SDK 大版本升级整体推进），不再由机器人驱动；一致性由决策 2 的门禁兜住。
-5. **workspace 依赖树规范**：`expo` 全仓**只保留一份** —— 根与 `packages/mobile` 声明同一范围（当前值以 `package.json` 与 `npx expo install --check` 的输出为准；本文件不抄版本字面量）。实测根写 `~57.0.25`、mobile 写 `~57.0.26` 时，npm 会在 `packages/mobile/node_modules` 下再装一份（`node_modules/expo@57.0.25` 与 `packages/mobile/node_modules/expo@57.0.26` 并存），于是「根 `node_modules/expo` 是哪个版本」变成陷阱。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（`~19.2.4` / `~19.2.3`）。
+5. **workspace 依赖树规范**：`expo` 全仓**只保留一份** —— 根与 `packages/mobile` 声明同一范围（当前值以 `package.json` 与 `npx expo install --check` 的输出为准；本文件不抄版本字面量）。实测根写 `~57.0.25`、mobile 写 `~57.0.26` 时，npm 会在 `packages/mobile/node_modules` 下再装一份（`node_modules/expo@57.0.25` 与 `packages/mobile/node_modules/expo@57.0.26` 并存），于是「根 `node_modules/expo` 是哪个版本」变成陷阱。同理 `@types/react` / `@types/react-dom` 的范围不得逃出 SDK 的 `relatedPackages`（SDK 58 为 `~19.3.0` / `~19.3.0`）。
    **并且：`expo install --check` 只校验「已装版本」，不校验 package.json 的声明地板** —— 实测 `expo-asset: ~57.0.13`（SDK 期望 `~57.0.18`）、`expo-file-system: ~57.0.5`（期望 `~57.0.7`）、`expo-font: ~57.0.1`（期望 `~57.0.4`）、`@babel/core: ^7.25.2`（期望 `^7.29.0`）都能全绿通过。声明地板必须人工按 SDK 期望对齐。
 
 ## 备选与否决
@@ -220,15 +220,15 @@ PR #727 / #728 仍 OPEN（audit-weekly 提供），合并后 lock 会变；**#66
 
 **残余不修的理由**：`expo-router@57` 仍依赖 CJS `query-string@7`，其 `decode-uri-component@^0.2.2` 被 `0.5.1` 的 ESM-only 入口挡住；直接顶版会在 Node/ Metro 的 `require()` 路径拿到命名空间对象而不是函数（本文「override 失效的三种成因」第 3 类）。干净且 CJS 可用的组合要等 `expo-router` 58 / SDK 58，不在本 PR 做跨 SDK 升级。
 
-## 2026-11-17 复核（#755：SDK 58 升级，3 high → 0）
+## 2026-11-17 复核（#755：SDK 58 升级，当次审计 3 high → 0）
 
 **复核时刻 2026-11-17（Asia/Hong_Kong）· 基线 `0406892` · node `v24.22.0` / npm `11.19.1`。**
 
 #755 把最后一条 high 链随 SDK 58 解除：
 
-- `expo` `57.0.32 → 58.0.25`、`expo-router` `57.0.30 → 58.0.32`、`react-native` `0.86.3 → 0.88.1`、`react`/`react-dom` `19.2.3 → 19.3.0`；全部 `expo-*` 按 SDK 58 `bundledNativeModules` 对齐，`npx expo install --check` 绿。
+- `expo` `57.0.32 → 58.0.26`、`expo-router` `57.0.30 → 58.0.32`、`react-native` `0.86.3 → 0.88.1`、`react`/`react-dom` `19.2.3 → 19.3.0`；全部 `expo-*` 按 SDK 58 `bundledNativeModules` 对齐，`npx expo install --check` 绿（58.0.26 为 CI `expo-check` 报告的 SDK 期望补丁）。
 - `expo-router@58` 已不依赖 `query-string`：`query-string` / `decode-uri-component` 整体移出 lock，`npm audit --package-lock-only` = **0**。
-- 根 `overrides.metro*` 由 `^0.84.6` 改为 **`0.87.1`（精确）**：`@expo/metro@58.0.0` 与 `@react-native/community-cli-plugin@0.88.1` 都要求 `0.87.1`；Expo versions API 的 `relatedPackages.metro = ^0.84.6` 不是这一层的权威，以包内声明为准。
+- 根 `overrides.metro*` 由 `^0.84.6` 改为 **`0.87.1`（精确）**：`@expo/metro@58.0.0` 与 `@react-native/community-cli-plugin@0.88.1` 都要求 `0.87.1`；Expo versions API 的 `relatedPackages.metro = ^0.84.6` 不是这一层的权威，以包内声明为准。同时删除无消费者的 `overrides['glob@^13.0.0']`（lock 内只剩 `glob@7.2.3`）。
 - 代码迁移：`Tabs initialRouteName` → `unstable_settings.anchor` + `backBehavior="initialRoute"`（expo-router 58 只在后者下让 tab 返回锚点）；`FileHandle.readBytes()` → `await`（expo-file-system 58）；native-player media3 `1.9.0 → 1.9.1`（与 expo-audio@58.0.12 一致）；Android Gradle wrapper `9.3.1 → 9.4.1`、`build.gradle` 的 Kotlin 版本条件与 `app.json` 的 `newArchEnabled` 删除按 SDK 58 模板同步。AGP 9 另外要求 `proguard-android-optimize.txt` 与 `android.builtInKotlin=false` / `android.newDsl=false`；compileSdk/buildTools 37 由 AGP 在构建期自动安装。
 - 验证：`verify -- static` / `mobile` / `renderer` / `core` 绿；`main` 在 Node 22 下 248/248 绿（Node 24 有 Vitest worker teardown 误报，隔离文件复跑绿）；`expo export --platform android` 成功；`expo-doctor` 19/20（仅剩 CNG 反向设计性 warning）。
 - 真机冒烟（PK110 / Android 16 / dev build `1.9.3-dev` / expo-dev-client / Fabric）：启动无 `undefined is not a function`；播放后 `PlayerService` `isForeground=true`、媒体会话 `PLAYING`、通知通道 `music-playback-native`，退后台继续播放；`mplayer://settings` 打开设置；下载落盘 `.mp3` + `.lrc` 并提示完成；`anchor`/`backBehavior` 警告消失，从「发现」返回落在「推荐」。合并 #754 后封面页歌词预览左对齐与新发现页正常渲染。

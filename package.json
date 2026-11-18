@@ -65,7 +65,6 @@
     "node-forge": "^1.4.3",
     "minimatch@^9.0.0": "^11.0.5",
     "minimatch@^10.0.0": "^11.0.5",
-    "glob@^13.0.0": "^14.0.4",
     "@electron/universal": {
       "minimatch": "^11.0.5"
     }
@@ -95,7 +94,7 @@
     "esbuild": "0.25.2",
     "eslint": "^10.9.1",
     "eslint-plugin-react-hooks": "^7.1.1",
-    "expo": "~58.0.25",
+    "expo": "~58.0.26",
     "fs-extra": "^11.4.0",
     "globals": "^17.13.0",
     "howler": "^2.2.4",

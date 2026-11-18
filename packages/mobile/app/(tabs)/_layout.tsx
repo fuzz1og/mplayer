@@ -17,7 +17,7 @@ import ChromeSurface from '../../components/ChromeSurface';
 import { usePlayerStore } from '../../stores/playerStore';
 import ScalePress from '../../components/ScalePress';
 
-// Expo Router 58：首屏锚点从 Tabs 的 initialRouteName prop 移到布局级 unstable_settings.anchor
+// Expo Router 58 首屏锚点；tab 返回锚点还需 backBehavior="initialRoute"
 export const unstable_settings = { anchor: 'recommend' };
 
 // 底部 chrome 的 tab 清单（与 <Tabs.Screen> 路由一一对应；search 页由 href:null 隐藏）
