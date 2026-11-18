@@ -286,6 +286,15 @@ jobs:
           done
           ls -la apk/release bundle/release
 
+      # #772：官方验签。APK minSdk=24，apksigner 默认按 24 校验、v1 不在适用区间会报 false；
+      # --min-sdk-version 23 强制把 v1 纳入校验，验签失败让 job 红（#725 此前只能发版后人工补跑）。
+      - name: Verify APK signatures (v1 + v2)
+        working-directory: packages/mobile/android/app/build/outputs/apk/release
+        run: |
+          SDK="${ANDROID_HOME:-$ANDROID_SDK_ROOT}"
+          APKSIGNER="$(ls -d "$SDK"/build-tools/*/ | sort -V | tail -n1)apksigner"
+          "$APKSIGNER" verify --verbose --print-certs --min-sdk-version 23 ./*.apk
+
       # #725：生成 md5sum 兼容的 .apk.md5 随 APK 上传；四源实取一致性留待发版期验。
       - name: Generate APK checksum
         working-directory: packages/mobile/android/app/build/outputs/apk/release
