@@ -1,5 +1,5 @@
 import './env'; // 必须第一个 import，设置 ELECTRON_GET_USE_PROXY
-import { app, BrowserWindow, ipcMain, session, globalShortcut, shell } from 'electron';
+import { app, BrowserWindow, ipcMain, session, globalShortcut, shell, screen, Menu } from 'electron';
 import path from 'path';
 import axios from 'axios';
 import { applyWslHidpiFix } from './hidpi';
@@ -24,6 +24,10 @@ import { registerDialogIpc, registerSettingsIpc, registerUpdateIpc, registerDown
 import { registerPlaybackTraceIpc } from './ipc/playbackTrace';
 import { registerCoverIpc } from './ipc/cover';
 import { registerCookiePersister, loadCookiesFromDisk } from './cookies/cookieAdapter';
+import { checkTrustedSenderFrame } from './ipc/trustedSender';
+import { LyricOverlayWindowController } from './lyricOverlay/lyricOverlayWindow';
+import type { FloatingLyricsBoundsRecord } from './lyricOverlay/overlayBounds';
+import { registerLyricOverlayIpc } from './ipc/lyricOverlay';
 
 // WSLg HiDPI 修复：WSL 下 Windows 缩放（如 4K 屏 150%）不会透传给 Chromium，
 // 需在 app ready 前读取 Windows DPI 并强制缩放系数（详见 hidpi.ts）
@@ -91,25 +95,12 @@ const musicApi = {
 // 标记是否正在退出（托盘退出时设置，防止 close 事件拦截退出）
 let isQuitting = false;
 
-/**
- * IPC 来源可信校验（审查修复）：只信任应用自身页面（生产 file:// / 开发 dev server）。
- * 渲染层若被注入（XSS），senderFrame.url 会是恶意来源，此处拦截其调用主进程能力。
- * 注意：senderFrame 为 null 仅出现在测试直接调用 handler 的场景（非真实 IPC），放行并告警。
- */
-function isTrustedIpcSender(frame: Electron.WebFrameMain | null | undefined): boolean {
-  if (!frame) {
-    console.warn('[IPC] 未提供 senderFrame（非真实 IPC 调用），放行');
-    return true;
-  }
-  const url = frame.url || '';
-  if (url.startsWith('file://')) return true;
-  if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return true;
-  return false;
-}
+/** 主窗句柄：`activate` 只按主窗判断，不再数全部窗口（覆盖层存活会挡住主窗重建，#766）。 */
+let mainWindowRef: BrowserWindow | null = null;
 
-/** 单个 IPC 调用的 sender 校验；不通过返回错误信息（null 表示通过）。 */
+/** 渲染层被注入时 senderFrame.url 是恶意来源；信任面收紧到 dist / dev 同源。 */
 export function checkIpcSender(frame: Electron.WebFrameMain | null | undefined): string | null {
-  return isTrustedIpcSender(frame) ? null : `IPC 来源不受信任: ${frame?.url ?? 'unknown'}`;
+  return checkTrustedSenderFrame(frame, { warnOnMissingFrame: true });
 }
 
 /**
@@ -156,6 +147,7 @@ function createWindow() {
     autoHideMenuBar: true,
     show: false
   });
+  mainWindowRef = mainWindow;
 
   // 审查修复：拦截渲染层一切外部导航与 window.open（防被注入后跳转到任意站点）
   mainWindow.webContents.on('will-navigate', (event, url) => {
@@ -273,6 +265,42 @@ app.whenReady().then(async () => {
   // “No handler registered for the musicApi 单通道”。
   registerMusicApiCall(musicApi);
   const mainWindow = createWindow();
+
+  // 悬浮歌词覆盖层（#774 / ADR 2026-11-19-desktop-lyric-overlay-window）：主进程只执行显隐与窗口。
+  const devServerUrl = process.env.VITE_DEV_SERVER_URL ?? null;
+  const lyricOverlay = new LyricOverlayWindowController({
+    createWindow: (options) => new BrowserWindow(options),
+    getDisplays: () => screen.getAllDisplays(),
+    getPrimaryDisplay: () => screen.getPrimaryDisplay(),
+    loadStoredBounds: () => db.getSetting<FloatingLyricsBoundsRecord>('floatingLyricsBounds'),
+    persistBounds: (bounds) => {
+      void db.setSetting('floatingLyricsBounds', bounds);
+    },
+    subscribeDisplayChanges: (listener) => {
+      const handler = (): void => listener();
+      screen.on('display-metrics-changed', handler);
+      return () => {
+        screen.removeListener('display-metrics-changed', handler);
+      };
+    },
+    // 右键只有「重置位置」；不扩覆盖层 preload（#769）
+    showContextMenu: (window) => {
+      Menu.buildFromTemplate([
+        { label: '重置位置', click: () => lyricOverlay.resetPosition() },
+      ]).popup({ window });
+    },
+    preloadPath: path.join(__dirname, 'lyricOverlayPreload.js'),
+    loadTarget: devServerUrl
+      ? { kind: 'url', value: `${devServerUrl.replace(/\/$/, '')}/lyric-overlay.html` }
+      : { kind: 'file', value: path.join(__dirname, '../dist/lyric-overlay.html') },
+    devServerUrl,
+  });
+  await lyricOverlay.init();
+  registerLyricOverlayIpc({
+    controller: lyricOverlay,
+    isMainWindowSender: (event) => event.sender === mainWindow.webContents,
+  });
+  mainWindow.webContents.on('render-process-gone', () => lyricOverlay.handleMainRendererGone());
 
   // 获取保存的下载目录，如果没有则使用默认的 Downloads 目录
   const defaultDownloadPath = app.getPath('downloads');
@@ -444,7 +472,7 @@ app.whenReady().then(async () => {
   });
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) {
+    if (!mainWindowRef || mainWindowRef.isDestroyed()) {
       createWindow();
     }
   });

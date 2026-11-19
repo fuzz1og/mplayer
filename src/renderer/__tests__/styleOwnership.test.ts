@@ -90,6 +90,9 @@ const OWNERSHIP: Record<string, string[]> = {
     'pages/HotlistDetailPage.tsx',
     'pages/PlaylistDetailPage.tsx',
   ],
+  // ── 独立覆盖层入口（多页 Vite entry） ──
+  'styles/lyric-overlay.css': ['overlay/main.ts'],
+
   'ui/forms.css': ['ui/forms.tsx'],
   'ui/tooltip.css': ['ui/tooltip.tsx'],
   'ui/overlay.css': ['ui/overlay.tsx', 'ui/menu.tsx'],

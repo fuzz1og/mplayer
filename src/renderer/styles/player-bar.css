@@ -435,3 +435,25 @@
 }
 
 /* 原来是组件里的 onMouseOver/onMouseOut 直接改 style，改由 CSS 接管 */
+
+/* 悬浮歌词「词」（#765 / #770）：开 = 强调色文字 + 淡强调底 + 强调边；关 = 弱化文字无底。 */
+.player-bar__lyrics-toggle {
+  min-width: 30px;
+  padding: var(--space-1) var(--space-2);
+  border: 1px solid transparent;
+  font-size: var(--text-xs);
+  font-weight: var(--weight-medium);
+  line-height: var(--text-sm);
+  color: var(--text-tertiary);
+}
+
+.player-bar__lyrics-toggle[aria-pressed='true'] {
+  color: var(--accent-text);
+  background-color: var(--accent-subtle);
+  border-color: var(--accent);
+}
+
+.player-bar__lyrics-toggle[aria-pressed='true']:hover {
+  background-color: var(--accent-subtle);
+  color: var(--accent-text);
+}

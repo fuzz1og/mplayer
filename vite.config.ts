@@ -41,6 +41,20 @@ export default defineConfig({
             }
           }
         }
+      },
+      // 悬浮歌词覆盖层专用 preload（#766）：只暴露 getState / onState
+      {
+        entry: 'src/main/lyricOverlayPreload.ts',
+        onstart() {},
+        vite: {
+          build: {
+            target: 'esnext',
+            outDir: 'dist-electron',
+            rollupOptions: {
+              external: ['electron']
+            }
+          }
+        }
       }
     ]),
     renderer()
@@ -63,6 +77,11 @@ export default defineConfig({
     minify: 'esbuild',
     assetsInlineLimit: 4096,
     rollupOptions: {
+      // 多页入口：主窗 + 独立覆盖层（#766：不把主应用 bundle 拉进第二个渲染进程）
+      input: {
+        main: path.resolve(__dirname, 'index.html'),
+        lyricOverlay: path.resolve(__dirname, 'lyric-overlay.html')
+      },
       output: {
         // 只钉真正全局共享的运行时；**不钉 antd**（#412）。
         // 此前 `antd: ['antd']` 把整个组件库塞进一个 chunk：入口只要用到任何一个

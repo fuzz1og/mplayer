@@ -5,6 +5,7 @@ import { vi } from 'vitest';
 vi.mock('electron', () => {
   const mockApp = {
     getPath: vi.fn().mockReturnValue('/tmp/mock-user-data'),
+    getAppPath: vi.fn().mockReturnValue('/app'),
     getVersion: vi.fn().mockReturnValue('1.0.0'),
     quit: vi.fn(),
     on: vi.fn(),
