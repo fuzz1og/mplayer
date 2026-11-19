@@ -1,3 +1,5 @@
+import path from 'node:path';
+import { pathToFileURL } from 'node:url';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import type { BrowserWindow, BrowserWindowConstructorOptions, Display, Rectangle } from 'electron';
 import {
@@ -7,7 +9,8 @@ import {
 import type { LyricOverlaySnapshot } from '@/shared/lyricOverlay';
 
 const PRELOAD = 'C:\\app\\dist-electron\\lyricOverlayPreload.js';
-const OVERLAY_FILE = 'C:\\app\\dist\\lyric-overlay.html';
+/** 用当前平台的绝对路径构造 file URL，避免 CI（Linux）与本地（Windows）的盘符差异。 */
+const OVERLAY_FILE = path.resolve('/app/dist/lyric-overlay.html');
 const CHANNEL = 'lyricOverlay:state';
 
 class FakeWebContents {
@@ -414,7 +417,7 @@ describe('悬浮歌词窗口控制器（#765 / #766 / #769）', () => {
     expect(blocked.preventDefault).toHaveBeenCalled();
 
     const allowed = { preventDefault: vi.fn() };
-    windows[0].webContents.emit('will-navigate', allowed, 'file:///C:/app/dist/lyric-overlay.html');
+    windows[0].webContents.emit('will-navigate', allowed, pathToFileURL(OVERLAY_FILE).href);
     expect(allowed.preventDefault).not.toHaveBeenCalled();
 
     const handler = windows[0].webContents.setWindowOpenHandler.mock.calls[0][0];
