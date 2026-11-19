@@ -32,6 +32,8 @@ registerPlaybackTraceSink();
 import { useSettingsStore } from '../stores/settingsStore';
 import { usePlayerStore } from '../stores/playerStore';
 import { useLogsStore } from '../stores/logsStore';
+import { initLyricsHost } from '../stores/lyricsStore';
+import { initLyricOverlay } from '../services/lyricOverlay';
 import PlayerOverlay from '../components/PlayerOverlay';
 import SongActionsHost from '../components/SongActionsHost';
 import UpdatePromptHost from '../components/UpdatePromptHost';
@@ -112,6 +114,9 @@ export default function RootLayout() {
 
   useEffect(() => {
     initAudio().catch(() => {});
+    // 歌词宿主（#775）：全屏播放器关着时也要为 Android 浮窗取词并推送 timing 表
+    initLyricsHost();
+    initLyricOverlay();
     // 随机序（#519）：冷启读回落盘的稳定序列（只补空），保证「重启后顺序不变」
     void usePlayerStore.getState().hydrateShuffle();
     // 存量数据迁移：persist rehydrate 完成后清理旧签名死链（幂等，见 legacyMigration）
