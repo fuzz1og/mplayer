@@ -83,6 +83,10 @@ internal class LyricOverlayController(
   private var lines: List<OverlayLyricLine> = emptyList()
   private var ended = false
   @Volatile private var viewAttached = false
+  /** addView 返回到首帧布局之间 isShown() 仍为 false；这段窗口不能据此判定窗口被系统藏起。 */
+  private var awaitingFirstFrame = false
+  /** attach / detach 代次：延迟到首帧后的可见性复核只认当前这次 attach。 */
+  private var attachGeneration = 0
   private var lastAppliedIndex = Int.MIN_VALUE
   private var appliedCurrentText = ""
   private var appliedNextText = ""
@@ -212,7 +216,8 @@ internal class LyricOverlayController(
     permission = canDrawOverlays(),
     attached = viewAttached,
     attachedToWindow = root.isAttachedToWindow,
-    shown = root.isShown(),
+    // 首帧前 isShown() 不可靠；先按 attached 报，首帧后的复核会纠偏或 detach。
+    shown = awaitingFirstFrame || root.isShown(),
     activityForeground = activityForeground
   )
 
@@ -341,22 +346,34 @@ internal class LyricOverlayController(
     try {
       windowManager.addView(root, params)
       viewAttached = true
+      awaitingFirstFrame = true
     } catch (error: Exception) {
       viewAttached = false
       Log.w(TAG, "overlay addView failed", error)
       return
     }
-    // 第二检：addView 不抛异常但系统已把窗口藏起来（权限撤销的常见形态）不算挂载成功
-    if (!isWindowReallyAttached()) {
-      Log.w(TAG, "overlay addView succeeded but window is not shown")
-      detachWindow()
-      emitState()
-      return
-    }
     setTouchable(activityForeground)
+
+    // 第二检：addView 不抛异常但系统已把窗口藏起来（权限撤销的常见形态）不算挂载成功。
+    // 但 addView 返回时首帧布局尚未完成，root.isShown() 仍为 false（LDPlayer Android 14 实测，
+    // #775）：立即双检会把正常窗口 detach 掉，浮窗永远不出现。延后到首帧后再复核。
+    val generation = ++attachGeneration
+    main.postDelayed({
+      if (generation != attachGeneration || !viewAttached) return@postDelayed
+      awaitingFirstFrame = false
+      if (!isWindowReallyAttached()) {
+        Log.w(TAG, "overlay addView succeeded but window is not shown")
+        detachWindow()
+        emitState()
+        return@postDelayed
+      }
+      emitState()
+    }, VISIBILITY_CHECK_DELAY_MS)
   }
 
   private fun detachWindow() {
+    attachGeneration++
+    awaitingFirstFrame = false
     if (!viewAttached) return
     viewAttached = false
     windowParams = null
@@ -452,9 +469,16 @@ internal class LyricOverlayController(
     }
   }
 
-  /** 权限之后第二道：窗口真实挂到 window 且处于显示态。 */
+  /**
+   * 权限之后第二道：窗口真实挂到 window 且处于显示态。
+   * 首帧前 isShown() 尚未就绪，只认「已挂到窗口」；首帧后的延迟复核再用完整条件。
+   */
   private fun isWindowReallyAttached(): Boolean =
-    LyricOverlayPolicy.reallyAttached(viewAttached, root.isAttachedToWindow, root.isShown())
+    if (awaitingFirstFrame) {
+      viewAttached && root.isAttachedToWindow
+    } else {
+      LyricOverlayPolicy.reallyAttached(viewAttached, root.isAttachedToWindow, root.isShown())
+    }
 
   private fun emitState() {
     val state = state()
@@ -513,5 +537,8 @@ internal class LyricOverlayController(
 
     /** 安全重同步阈值（规格 §6.3-4）。 */
     private const val DRIFT_MS = 1_500L
+
+    /** addView 后等一帧再复核 isShown()；100ms 覆盖首帧布局，不在热路径上。 */
+    private const val VISIBILITY_CHECK_DELAY_MS = 100L
   }
 }
