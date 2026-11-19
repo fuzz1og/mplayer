@@ -274,7 +274,9 @@ app.whenReady().then(async () => {
     getPrimaryDisplay: () => screen.getPrimaryDisplay(),
     loadStoredBounds: () => db.getSetting<FloatingLyricsBoundsRecord>('floatingLyricsBounds'),
     persistBounds: (bounds) => {
-      void db.setSetting('floatingLyricsBounds', bounds);
+      void db
+        .setSetting('floatingLyricsBounds', bounds)
+        .catch((error) => console.error('保存悬浮歌词位置失败:', error));
     },
     subscribeDisplayChanges: (listener) => {
       const handler = (): void => listener();

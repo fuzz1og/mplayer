@@ -63,7 +63,12 @@ export class LyricOverlayWindowController {
   }
 
   async init(): Promise<void> {
-    this.stored = sanitizeStoredBounds(await this.deps.loadStoredBounds());
+    try {
+      this.stored = sanitizeStoredBounds(await this.deps.loadStoredBounds());
+    } catch {
+      // 坏存档不阻断启动：位置回到默认位
+      this.stored = {};
+    }
     this.unsubscribeDisplay = this.deps.subscribeDisplayChanges(() => this.handleDisplayChange());
   }
 

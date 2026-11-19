@@ -14,7 +14,7 @@ export function defaultBoundsForDisplay(
   const height = Math.min(size.height, workArea.height);
   return {
     x: workArea.x + Math.round((workArea.width - width) / 2),
-    y: workArea.y + workArea.height - height - LYRIC_OVERLAY_BOTTOM_MARGIN,
+    y: Math.max(workArea.y, workArea.y + workArea.height - height - LYRIC_OVERLAY_BOTTOM_MARGIN),
     width,
     height,
   };
