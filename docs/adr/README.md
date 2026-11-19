@@ -54,6 +54,9 @@
 | 可播 URL 的编码归一落在 core 解析链出口（#622） | `2026-10-09-playable-url-encoding-single-gate.md` | 已接受（**真机 soda 下载已过**：雷电 emulator-5556 / Android 14 dev build；残留一条不经出口的 `getSodaAudioUrl` 旁腿） |
 | 曲末决策上提 core：core 出决策表、原生只执行（#650 / #639 R4） | `2026-10-26-end-of-track-decision-ownership.md` | 已接受（#666 已实施）——core `planEndOfTrack` + policy `endOfTrack` 下推 + 原生查表/兜底双路径 |
 | 桌面端自建原语、设置全屏视图、选中不用品牌蓝（#678 / #691） | `2026-10-27-desktop-ui-primitives-and-settings-shell.md` | 已接受 |
+| 桌面歌词悬浮条：独立覆盖窗 + 主进程语义快照通道（#628 / #760 / #771） | `2026-11-19-desktop-lyric-overlay-window.md` | 已接受 |
+| Android 歌词浮窗：挂 PlayerService、原生时序与权限意图契约（#628 / #760 / #771） | `2026-11-19-android-lyric-overlay-service.md` | 已接受 |
+| 悬浮歌词双端共享契约：逐行可见性、设置面与视觉基线（#628 / #760 / #771） | `2026-11-19-lyric-overlay-shared-contract.md` | 已接受 |
 
 ## 历史编号对照（冻结）
 
