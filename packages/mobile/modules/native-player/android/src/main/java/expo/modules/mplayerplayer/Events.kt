@@ -11,6 +11,7 @@ internal object Events {
   const val NEED_TRACKS = "needTracks"
   const val PLAYBACK_ERROR = "playbackError"
   const val SERVICE_STATE = "serviceState"
+  const val LYRIC_OVERLAY_STATE = "lyricOverlayState"
 
   val ALL = arrayOf(
     TRACK_CHANGED,
@@ -19,7 +20,8 @@ internal object Events {
     QUEUE_ENDED,
     NEED_TRACKS,
     PLAYBACK_ERROR,
-    SERVICE_STATE
+    SERVICE_STATE,
+    LYRIC_OVERLAY_STATE
   )
 }
 

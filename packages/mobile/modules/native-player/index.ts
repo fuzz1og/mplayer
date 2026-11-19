@@ -164,6 +164,21 @@ export type PlaybackErrorEvent = {
 
 export type ServiceStateEvent = { foreground: boolean; restoring: boolean };
 
+/** Android 歌词浮窗的运行时态（ADR 2026-11-19-android-lyric-overlay-service §7）。 */
+export type LyricOverlayState = {
+  /** 持久意图（用户开关） */
+  enabled: boolean;
+  /** Settings.canDrawOverlays() 的当前结果 */
+  permission: boolean;
+  /** 窗口是否已 addView 且可见 */
+  attached: boolean;
+  /** 仅 MPlayer 前台时可拖，其余自动穿透 */
+  touchable: boolean;
+};
+
+/** `setLyricLines` 的一行；`time` 单位秒，与 core `LyricLine.time` 相同。 */
+export type LyricOverlayLine = { time: number; text: string };
+
 export type NativePlayerEvents = {
   trackChanged: TrackChangedEvent;
   stateChanged: StateChangedEvent;
@@ -172,6 +187,7 @@ export type NativePlayerEvents = {
   needTracks: NeedTracksEvent;
   playbackError: PlaybackErrorEvent;
   serviceState: ServiceStateEvent;
+  lyricOverlayState: LyricOverlayState;
 };
 
 type Subscription = { remove(): void };
@@ -214,6 +230,13 @@ export type NativePlayerModule = {
   setRate(rate: number): void;
   setPolicy(policy: Policy): void;
   stop(): void;
+  /** 入口隐藏依据：API 26+ 且非 low-RAM（规格 §3.2 / #768） */
+  isLyricOverlaySupported(): boolean;
+  canDrawOverlays(): boolean;
+  openOverlaySettings(): void;
+  setLyricOverlayEnabled(enabled: boolean): LyricOverlayState;
+  getLyricOverlayState(): LyricOverlayState;
+  setLyricLines(trackKey: string, lines: LyricOverlayLine[]): void;
   addListener<K extends keyof NativePlayerEvents>(
     event: K,
     listener: (payload: NativePlayerEvents[K]) => void

@@ -5,10 +5,12 @@ package expo.modules.mplayerplayer
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
+import android.provider.Settings
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -38,6 +40,14 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   private var controller: PlaybackController? = null
   private var session: MediaLibrarySession? = null
   private var prefs: android.content.SharedPreferences? = null
+  private var overlay: LyricOverlayController? = null
+
+  /** 浮窗读取原生播放状态；窗口与调度都归 [LyricOverlayController]（#775）。 */
+  private val overlayHost = object : LyricOverlayController.Host {
+    override fun positionMs(): Long = controller?.positionMs() ?: 0L
+    override fun isPlaying(): Boolean = controller?.isPlaying() ?: false
+    override fun currentTrackKey(): String? = controller?.currentKey() ?: store.current()?.key
+  }
 
   @Volatile
   private var stateCache: Map<String, Any?> = emptyMap()
@@ -87,6 +97,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     override fun run() {
       if (destroyed) return
       emitProgress()
+      overlay?.onProgressTick()
       maybeRequestTracks(NeedReason.LOW_WATER)
       main.postDelayed(this, 1_000L)
     }
@@ -124,6 +135,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
 
     PlayerBridge.service = this
     restoreSnapshot()
+    // 恢复快照只取「开关意图 + 窗口位置」；表由 JS 重推，onCreate 不开窗（规格 §6.4）。
+    overlay = LyricOverlayController(applicationContext, prefs!!, overlayHost).also { it.start() }
 
     main.postDelayed(progressTick, 1_000L)
     main.postDelayed(persistTick, 60_000L)
@@ -165,6 +178,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     cancelErrorRetry()
     persist()
     PrefetchBridge.releaseAll()
+    overlay?.destroy()
+    overlay = null
     PlayerBridge.onServiceGone()
     session?.release()
     session = null
@@ -522,6 +537,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     userWantsPlay = false
     holePending = false
     cancelWindowHoleDeadline()
+    overlay?.onPlaybackEnded()
     ctrl.player.pause()
     exhaustion.mark(store.currentRevision(), store.currentIndex())
     Log.i(
@@ -672,6 +688,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       } else if (ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1) {
         // 用户主动 next 踩空 → 立即 queueEnded，不重试（§4.1）
         pendingUserNext = true
+        overlay?.onPlaybackEnded()
         ctrl.player.pause()
         emit(Events.QUEUE_ENDED, mapOf("reason" to EndReason.WINDOW_HOLE, "index" to ctrl.currentIndex(), "revision" to store.currentRevision()))
         requestTracks(NeedReason.HOLE)
@@ -739,6 +756,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     holePending = false
     cancelWindowHoleDeadline()
     PrefetchBridge.releaseAll()
+    overlay?.onPlaybackEnded()
     main.post {
       controller?.player?.pause()
       controller?.player?.stop()
@@ -747,6 +765,34 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       persist()
       stopSelf()
     }
+  }
+
+  // ---------------------------------------------------------------- lyric overlay
+
+  /** 模块的同步命令来自 JS 线程；窗口操作必须落到主线程。 */
+  fun setLyricOverlayEnabled(enabled: Boolean): Map<String, Any?> {
+    val ctrl = overlay
+    if (ctrl != null) main.post { ctrl.setEnabled(enabled) }
+    return lyricOverlayState()
+  }
+
+  fun lyricOverlayState(): Map<String, Any?> =
+    overlay?.state()?.toMap() ?: mapOf(
+      "enabled" to (prefs?.getBoolean(LyricOverlayController.KEY_ENABLED, false) ?: false),
+      "permission" to canDrawOverlays(),
+      "attached" to false,
+      "touchable" to false
+    )
+
+  internal fun setLyricLines(trackKey: String, lines: List<OverlayLyricLine>) {
+    val ctrl = overlay ?: return
+    main.post { ctrl.setLines(trackKey, lines) }
+  }
+
+  private fun canDrawOverlays(): Boolean = try {
+    Settings.canDrawOverlays(this)
+  } catch (_: Throwable) {
+    false
   }
 
   // ---------------------------------------------------------------- callbacks
@@ -759,6 +805,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val index = ctrl.currentIndex()
     store.moveTo(index)
     val toKey = mediaItem.mediaId
+    // 切曲即丢弃旧表 + removeView：绝不显示上一首最后一行（规格 §6.3-5）。
+    overlay?.onTrackChanged(toKey)
     val fromKey = lastKey
     lastKey = toKey
     val record = store.current()
@@ -795,6 +843,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
   override fun onIsPlayingChanged(isPlaying: Boolean) {
+    overlay?.onIsPlayingChanged(isPlaying)
     emitStateChanged()
     // 我们的 JS 走自写 bridge 而不是 MediaController，所以必须自己叫一次—— 否则会话没有媒体通知，
     // 也就没有 FGS 提升（会被系统 idle 停掉）。
@@ -806,11 +855,18 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
   override fun onPositionDiscontinuity(reason: Int) {
+    overlay?.onSeek()
     refreshState()
   }
 
   override fun onPlayerError(error: PlaybackException) {
+    overlay?.onPlaybackEnded()
     handlePlayerError(error)
+  }
+
+  override fun onConfigurationChanged(newConfig: Configuration) {
+    super.onConfigurationChanged(newConfig)
+    overlay?.onConfigurationChanged()
   }
 
   // ---------------------------------------------------------------- advance
@@ -862,6 +918,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     }
 
     holePending = true
+    overlay?.onPlaybackEnded()
     ctrl.player.pause()
     emit(
       Events.QUEUE_ENDED,
@@ -884,6 +941,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     main.post {
       if (!holePending) return@post
       Log.w(TAG, "prefetch window exhausted; stopping at buffer boundary")
+      overlay?.onPlaybackEnded()
       controller?.player?.pause()
       emit(
         Events.QUEUE_ENDED,
@@ -1012,6 +1070,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       ErrorKind.NETWORK -> {
         if (policy.stopWhenOffline && !isOnline()) {
           userWantsPlay = false
+          overlay?.onPlaybackEnded()
           ctrl.player.pause()
           emit(
             Events.PLAYBACK_ERROR,
@@ -1102,6 +1161,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val maySkip = policy.maySkip(skippedThisSession)
     if (!maySkip) {
       userWantsPlay = false
+      overlay?.onPlaybackEnded()
       ctrl.player.pause()
       emit(
         Events.PLAYBACK_ERROR,
@@ -1341,7 +1401,9 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   companion object {
     private const val TAG = "MPlayerNativePlayer"
     private const val SESSION_ID = "MPlayerNativePlayer"
-    private const val PREFS_NAME = "mplayer_native_player"
+
+    /** 模块在服务未启动时也要镜像浮窗开关意图（#775），因此不能是 private。 */
+    internal const val PREFS_NAME = "mplayer_native_player"
     private const val KEY_SNAPSHOT = "snapshot"
 
     /** #666 曲末策略表在快照里的键；缺键 = 缺表 = 兜底。 */
