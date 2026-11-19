@@ -36,14 +36,23 @@ internal object LyricOverlayPolicy {
   fun isTrackChange(currentKey: String?, incomingKey: String?): Boolean =
     !(incomingKey != null && incomingKey == currentKey)
 
-  /** `attached` / `touchable` 在对外状态里必须经权限双检（撤销后窗口可能被系统隐藏但不抛异常）。 */
+  /**
+   * 窗口可见性双检（规格 §6.2）：`addView` 不抛异常不代表窗口没被系统藏起来，
+   * `attached` 必须同时满足「已 addView」+「挂到窗口」+「真实显示」。
+   */
+  fun reallyAttached(attached: Boolean, attachedToWindow: Boolean, shown: Boolean): Boolean =
+    attached && attachedToWindow && shown
+
+  /** `attached` / `touchable` 在对外状态里必须经权限 + 窗口可见性双检。 */
   fun state(
     enabled: Boolean,
     permission: Boolean,
     attached: Boolean,
+    attachedToWindow: Boolean,
+    shown: Boolean,
     activityForeground: Boolean
   ): LyricOverlayState {
-    val reallyAttached = attached && permission
+    val reallyAttached = permission && reallyAttached(attached, attachedToWindow, shown)
     return LyricOverlayState(
       enabled = enabled,
       permission = permission,

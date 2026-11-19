@@ -1,9 +1,14 @@
 import { useSyncExternalStore } from 'react';
-import { findCurrentLyricIndex, parseLRC, type LyricLine } from '@mplayer/core';
+import { findCurrentLyricIndex, type LyricLine } from '@mplayer/core';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 import { playbackClock } from '@/renderer/services/playbackClock';
+import { OverlayLyricsMemo, parseOverlayLines } from '@/renderer/overlay/timing';
 import { readPrefs, subscribeAppearance } from '@/renderer/theme/appearancePrefs';
-import type { LyricsSize, LyricOverlaySnapshot } from '@/shared/lyricOverlay';
+import {
+  LYRIC_OVERLAY_STATE_CHANNEL,
+  type LyricsSize,
+  type LyricOverlaySnapshot,
+} from '@/shared/lyricOverlay';
 
 /** 开关持久键与值形态见 #769：'true' / 'false'，其它值按 false。 */
 export const FLOATING_LYRICS_ENABLED_KEY = 'floatingLyricsEnabled';
@@ -57,21 +62,16 @@ export interface LyricOverlaySourceState {
   hasPlaybackError: boolean;
 }
 
-function parseLines(lyricsText: string): LyricLine[] {
-  if (!lyricsText.trim()) return [];
-  try {
-    return parseLRC(lyricsText).lines;
-  } catch {
-    return [];
-  }
-}
-
 /**
  * 可见性归 #764：无词 / 加载中 / 停止 / 队尾 / 错误隐藏；暂停冻结；
  * 前奏（idx<0）播放时可见，暂停且无当前行时隐藏（进入条件要求「暂停有当前行」）。
+ * `parsedLines` 可由调用方的 memo 传入，省掉每次位置变化都重新 parseLRC。
  */
-export function buildLyricOverlaySnapshot(source: LyricOverlaySourceState): LyricOverlaySnapshot {
-  const lines = parseLines(source.lyricsText);
+export function buildLyricOverlaySnapshot(
+  source: LyricOverlaySourceState,
+  parsedLines?: readonly LyricLine[],
+): LyricOverlaySnapshot {
+  const lines = parsedLines ?? parseOverlayLines(source.lyricsText);
   const currentIndex = findCurrentLyricIndex(lines, source.positionSec);
   const visible =
     source.enabled &&
@@ -128,25 +128,29 @@ export function startLyricOverlaySync(options: LyricOverlaySyncOptions = {}): ()
 
   let lastSent: LyricOverlaySnapshot | null = null;
   let lastSentAt = 0;
+  const linesMemo = new OverlayLyricsMemo();
 
   const buildSnapshot = (): LyricOverlaySnapshot => {
     const state = usePlayerStore.getState();
-    return buildLyricOverlaySnapshot({
-      enabled: readFloatingLyricsEnabled(),
-      playing: state.isPlaying,
-      songId: state.currentSong?.id ?? null,
-      lyricsText: state.lyrics,
-      positionSec: playbackClock.getPositionNow(),
-      durationSec: playbackClock.getSnapshot().duration,
-      lyricsSize: readPrefs().lyricsSize,
-      hasPlaybackError: state.error !== null,
-    });
+    return buildLyricOverlaySnapshot(
+      {
+        enabled: readFloatingLyricsEnabled(),
+        playing: state.isPlaying,
+        songId: state.currentSong?.id ?? null,
+        lyricsText: state.lyrics,
+        positionSec: playbackClock.getPositionNow(),
+        durationSec: playbackClock.getSnapshot().duration,
+        lyricsSize: readPrefs().lyricsSize,
+        hasPlaybackError: state.error !== null,
+      },
+      linesMemo.linesFor(state.lyrics),
+    );
   };
 
   const commit = (snapshot: LyricOverlaySnapshot): void => {
     lastSent = snapshot;
     lastSentAt = now();
-    send('lyricOverlay:state', snapshot);
+    send(LYRIC_OVERLAY_STATE_CHANNEL, snapshot);
   };
 
   const push = (): void => {
@@ -174,7 +178,10 @@ export function startLyricOverlaySync(options: LyricOverlaySyncOptions = {}): ()
 
   const unsubscribers = [
     usePlayerStore.subscribe(push),
-    playbackClock.subscribe(push),
+    // 关闭时位置走表没有信息量（主进程已销毁 / 隐藏窗口）：不构建、不推送
+    playbackClock.subscribe(() => {
+      if (readFloatingLyricsEnabled()) push();
+    }),
     playbackClock.subscribePlaying(push),
     subscribeAppearance(push),
     subscribeFloatingLyricsEnabled(push),

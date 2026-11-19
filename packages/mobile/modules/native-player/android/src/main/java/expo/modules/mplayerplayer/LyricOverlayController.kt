@@ -16,7 +16,6 @@ import android.os.Handler
 import android.os.Looper
 import android.os.Process
 import android.os.SystemClock
-import android.provider.Settings
 import android.text.TextUtils
 import android.util.Log
 import android.util.TypedValue
@@ -78,7 +77,7 @@ internal class LyricOverlayController(
     ellipsize = TextUtils.TruncateAt.END
   }
 
-  @Volatile private var enabled = prefs.getBoolean(KEY_ENABLED, false)
+  @Volatile private var enabled = prefs.getBoolean(LyricOverlaySettings.KEY_ENABLED, false)
   /** 当前表所属的 mediaId；同曲 replaceItem 也会触发 media transition，不能据此清表。 */
   private var trackKey: String? = null
   private var lines: List<OverlayLyricLine> = emptyList()
@@ -181,7 +180,7 @@ internal class LyricOverlayController(
 
   fun setEnabled(value: Boolean) {
     enabled = value
-    prefs.edit().putBoolean(KEY_ENABLED, value).apply()
+    LyricOverlaySettings.setEnabled(context, value)
     refresh()
   }
 
@@ -212,6 +211,8 @@ internal class LyricOverlayController(
     enabled = enabled,
     permission = canDrawOverlays(),
     attached = viewAttached,
+    attachedToWindow = root.isAttachedToWindow,
+    shown = root.isShown(),
     activityForeground = activityForeground
   )
 
@@ -308,7 +309,8 @@ internal class LyricOverlayController(
 
   private fun refresh() {
     val permission = canDrawOverlays()
-    if (viewAttached && !permission) detachWindow()
+    // 权限 + 可见性双检：撤销后系统可能只把窗口藏起来而不抛异常（规格 §6.2）
+    if (viewAttached && (!permission || !isWindowReallyAttached())) detachWindow()
 
     val positionMs = host.positionMs()
     val hasCurrentLine = LyricTiming.findCurrentIndex(lines, positionMs / 1000.0) >= 0
@@ -344,7 +346,14 @@ internal class LyricOverlayController(
       Log.w(TAG, "overlay addView failed", error)
       return
     }
-    applyWindowFlags()
+    // 第二检：addView 不抛异常但系统已把窗口藏起来（权限撤销的常见形态）不算挂载成功
+    if (!isWindowReallyAttached()) {
+      Log.w(TAG, "overlay addView succeeded but window is not shown")
+      detachWindow()
+      emitState()
+      return
+    }
+    setTouchable(activityForeground)
   }
 
   private fun detachWindow() {
@@ -381,16 +390,7 @@ internal class LyricOverlayController(
     }
   }
 
-  private fun applyWindowFlags() {
-    val params = windowParams ?: return
-    params.flags = if (activityForeground) {
-      params.flags and WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE.inv()
-    } else {
-      params.flags or WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE
-    }
-    updateLayout(params)
-  }
-
+  /** NOT_TOUCHABLE 的唯一写点：attach / 前后台切换 / 权限双检后的修复都走这里。 */
   private fun setTouchable(touchable: Boolean) {
     if (!viewAttached) return
     val params = windowParams ?: return
@@ -446,11 +446,15 @@ internal class LyricOverlayController(
   // ---------------------------------------------------------------- helpers
 
   private fun checkPermissionOnForeground() {
-    if (viewAttached && !canDrawOverlays()) {
+    if (viewAttached && (!canDrawOverlays() || !isWindowReallyAttached())) {
       detachWindow()
       emitState()
     }
   }
+
+  /** 权限之后第二道：窗口真实挂到 window 且处于显示态。 */
+  private fun isWindowReallyAttached(): Boolean =
+    LyricOverlayPolicy.reallyAttached(viewAttached, root.isAttachedToWindow, root.isShown())
 
   private fun emitState() {
     val state = state()
@@ -459,11 +463,7 @@ internal class LyricOverlayController(
     PlayerBridge.emit(Events.LYRIC_OVERLAY_STATE, state.toMap())
   }
 
-  private fun canDrawOverlays(): Boolean = try {
-    Settings.canDrawOverlays(context)
-  } catch (_: Throwable) {
-    false
-  }
+  private fun canDrawOverlays(): Boolean = LyricOverlaySettings.canDrawOverlays(context)
 
   private fun isAppInForeground(): Boolean = try {
     val manager = context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
@@ -499,7 +499,6 @@ internal class LyricOverlayController(
 
   companion object {
     private const val TAG = "MPlayerNativePlayer"
-    internal const val KEY_ENABLED = "floatingLyricsEnabled"
     internal const val KEY_X = "floatingLyricsX"
     internal const val KEY_Y = "floatingLyricsY"
 

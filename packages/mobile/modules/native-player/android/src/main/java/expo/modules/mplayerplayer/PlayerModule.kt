@@ -252,7 +252,7 @@ class PlayerModule : Module() {
 
     Function("canDrawOverlays") {
       val context = overlayContext() ?: return@Function false
-      canDrawOverlays(context)
+      LyricOverlaySettings.canDrawOverlays(context)
     }
 
     Function("openOverlaySettings") {
@@ -274,12 +274,7 @@ class PlayerModule : Module() {
     /** 只持久化意图；无权限不 addView、不抛错（规格 §6.2 / #768）。 */
     Function("setLyricOverlayEnabled") { enabled: Boolean ->
       val context = overlayContext()
-      context?.let {
-        it.getSharedPreferences(PlayerService.PREFS_NAME, Context.MODE_PRIVATE)
-          .edit()
-          .putBoolean(LyricOverlayController.KEY_ENABLED, enabled)
-          .apply()
-      }
+      context?.let { LyricOverlaySettings.setEnabled(it, enabled) }
       PlayerBridge.service?.setLyricOverlayEnabled(enabled) ?: overlaySnapshot(context)
     }
 
@@ -301,20 +296,11 @@ class PlayerModule : Module() {
     appContext.reactContext ?: appContext.currentActivity?.applicationContext
 
   private fun overlaySnapshot(context: Context?): Map<String, Any?> = mapOf(
-    "enabled" to (context?.let {
-      it.getSharedPreferences(PlayerService.PREFS_NAME, Context.MODE_PRIVATE)
-        .getBoolean(LyricOverlayController.KEY_ENABLED, false)
-    } ?: false),
-    "permission" to (context != null && canDrawOverlays(context)),
+    "enabled" to (context?.let { LyricOverlaySettings.isEnabled(it) } ?: false),
+    "permission" to (context != null && LyricOverlaySettings.canDrawOverlays(context)),
     "attached" to false,
     "touchable" to false
   )
-
-  private fun canDrawOverlays(context: Context): Boolean = try {
-    Settings.canDrawOverlays(context)
-  } catch (_: Throwable) {
-    false
-  }
 
   private fun isLowRamDevice(context: Context): Boolean = try {
     (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice

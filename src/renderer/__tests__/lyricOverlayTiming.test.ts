@@ -4,6 +4,7 @@ import {
   anchorPosition,
   deriveOverlayLines,
   msUntilNextLine,
+  OverlayLyricsMemo,
   parseOverlayLines,
 } from '@/renderer/overlay/timing';
 
@@ -38,6 +39,17 @@ describe('覆盖层行推导与本地时钟（#764 / #766）', () => {
     expect(msUntilNextLine(lines, 1, true)).toBe(4000);
     expect(msUntilNextLine(lines, 16, true)).toBeNull();
     expect(msUntilNextLine(lines, 6, false)).toBeNull();
+  });
+
+  it('同一歌词文本只解析一次（250ms 走表不重复 parseLRC）', () => {
+    const memo = new OverlayLyricsMemo();
+    const first = memo.linesFor(LRC);
+    expect(first).toHaveLength(3);
+    expect(memo.linesFor(LRC)).toBe(first);
+
+    const changed = memo.linesFor(`${LRC}\n[00:20.00]第四句`);
+    expect(changed).not.toBe(first);
+    expect(changed).toHaveLength(4);
   });
 
   it('parseLRC 的逐字标签不会漏进覆盖层文本（只做逐行）', () => {

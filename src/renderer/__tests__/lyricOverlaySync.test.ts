@@ -112,6 +112,20 @@ describe('主窗渲染层 → 覆盖层快照同步（#766）', () => {
     expect(sentSnapshots(send).at(-1)).toMatchObject({ positionSec: 15, playing: true });
   });
 
+  it('关闭时位置走表不推快照（省掉无意义的整份报文与解析）', () => {
+    const send = vi.fn();
+    dispose = startLyricOverlaySync({ send, now: () => 0 });
+    setFloatingLyricsEnabled(false);
+    usePlayerStore.setState({ currentSong: song(), lyrics: LRC, isPlaying: false });
+    playbackClock.setDuration(30);
+    send.mockClear();
+
+    playbackClock.setPosition(5);
+    playbackClock.setPosition(6);
+    playbackClock.setPosition(7);
+    expect(sentSnapshots(send)).toHaveLength(0);
+  });
+
   it('播放且可见时约 10s 心跳纠偏', () => {
     const send = vi.fn();
     let nowMs = 0;

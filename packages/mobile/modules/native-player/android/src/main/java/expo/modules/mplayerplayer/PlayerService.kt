@@ -10,7 +10,6 @@ import android.net.ConnectivityManager
 import android.net.NetworkCapabilities
 import android.os.Handler
 import android.os.Looper
-import android.provider.Settings
 import android.util.Log
 import androidx.media3.common.C
 import androidx.media3.common.ForwardingPlayer
@@ -537,14 +536,12 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     userWantsPlay = false
     holePending = false
     cancelWindowHoleDeadline()
-    overlay?.onPlaybackEnded()
-    ctrl.player.pause()
     exhaustion.mark(store.currentRevision(), store.currentIndex())
     Log.i(
       TAG,
       "$cause (revision=${store.currentRevision()} index=${store.currentIndex()}) → exhausted"
     )
-    emit(
+    settlePlayback(
       Events.QUEUE_ENDED,
       mapOf("reason" to EndReason.EXHAUSTED, "index" to ctrl.currentIndex(), "revision" to store.currentRevision())
     )
@@ -688,9 +685,10 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       } else if (ctrl.currentIndex() >= ctrl.player.mediaItemCount - 1) {
         // 用户主动 next 踩空 → 立即 queueEnded，不重试（§4.1）
         pendingUserNext = true
-        overlay?.onPlaybackEnded()
-        ctrl.player.pause()
-        emit(Events.QUEUE_ENDED, mapOf("reason" to EndReason.WINDOW_HOLE, "index" to ctrl.currentIndex(), "revision" to store.currentRevision()))
+        settlePlayback(
+          Events.QUEUE_ENDED,
+          mapOf("reason" to EndReason.WINDOW_HOLE, "index" to ctrl.currentIndex(), "revision" to store.currentRevision())
+        )
         requestTracks(NeedReason.HOLE)
       } else {
         ctrl.player.seekToNextMediaItem()
@@ -756,11 +754,13 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     holePending = false
     cancelWindowHoleDeadline()
     PrefetchBridge.releaseAll()
-    overlay?.onPlaybackEnded()
+    // 这个入口来自 JS 线程：窗口收口与播放器操作都必须一起落到主线程
     main.post {
-      controller?.player?.pause()
+      settlePlayback(
+        Events.QUEUE_ENDED,
+        mapOf("reason" to EndReason.STOPPED, "index" to store.currentIndex(), "revision" to store.currentRevision())
+      )
       controller?.player?.stop()
-      emit(Events.QUEUE_ENDED, mapOf("reason" to EndReason.STOPPED, "index" to store.currentIndex(), "revision" to store.currentRevision()))
       store.clear()
       persist()
       stopSelf()
@@ -773,13 +773,14 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   fun setLyricOverlayEnabled(enabled: Boolean): Map<String, Any?> {
     val ctrl = overlay
     if (ctrl != null) main.post { ctrl.setEnabled(enabled) }
-    return lyricOverlayState()
+    // 应用落在主线程队列上，同步读会拿到旧值：本次请求的 enabled 必须如实回给调用方
+    return lyricOverlayState() + mapOf("enabled" to enabled)
   }
 
   fun lyricOverlayState(): Map<String, Any?> =
     overlay?.state()?.toMap() ?: mapOf(
-      "enabled" to (prefs?.getBoolean(LyricOverlayController.KEY_ENABLED, false) ?: false),
-      "permission" to canDrawOverlays(),
+      "enabled" to LyricOverlaySettings.isEnabled(this),
+      "permission" to LyricOverlaySettings.canDrawOverlays(this),
       "attached" to false,
       "touchable" to false
     )
@@ -789,10 +790,25 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     main.post { ctrl.setLines(trackKey, lines) }
   }
 
-  private fun canDrawOverlays(): Boolean = try {
-    Settings.canDrawOverlays(this)
-  } catch (_: Throwable) {
-    false
+  /**
+   * 终局转移的唯一落点（规格 §4.2）：浮窗收口 + 暂停 + 终点事件。
+   * 此前这段副作用手接在八处，`skipFailedItem` 的 EXHAUSTED 分支漏了浮窗，
+   * 最后一首失败会留下冻结的失败行——新增终局路径一律经此。
+   */
+  private fun settlePlayback(event: String, payload: Map<String, Any?>) {
+    hideOverlay()
+    controller?.player?.pause()
+    emit(event, payload)
+  }
+
+  /** 浮窗收口的唯一出口；窗口操作必须落主线程（`stop()` 的调用线程是 JS 线程）。 */
+  private fun hideOverlay() {
+    val ctrl = overlay ?: return
+    if (Looper.myLooper() == Looper.getMainLooper()) {
+      ctrl.onPlaybackEnded()
+    } else {
+      main.post { ctrl.onPlaybackEnded() }
+    }
   }
 
   // ---------------------------------------------------------------- callbacks
@@ -860,7 +876,8 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
   }
 
   override fun onPlayerError(error: PlaybackException) {
-    overlay?.onPlaybackEnded()
+    // 错误先收浮窗（规格 §4.2）；是否终局由 handlePlayerError 判定，重试成功会按幂等条件重建
+    hideOverlay()
     handlePlayerError(error)
   }
 
@@ -918,9 +935,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     }
 
     holePending = true
-    overlay?.onPlaybackEnded()
-    ctrl.player.pause()
-    emit(
+    settlePlayback(
       Events.QUEUE_ENDED,
       mapOf("reason" to EndReason.WINDOW_HOLE, "index" to ctrl.currentIndex(), "revision" to store.currentRevision())
     )
@@ -941,9 +956,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     main.post {
       if (!holePending) return@post
       Log.w(TAG, "prefetch window exhausted; stopping at buffer boundary")
-      overlay?.onPlaybackEnded()
-      controller?.player?.pause()
-      emit(
+      settlePlayback(
         Events.QUEUE_ENDED,
         mapOf("reason" to EndReason.WINDOW_HOLE, "index" to store.currentIndex(), "revision" to store.currentRevision())
       )
@@ -1070,9 +1083,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
       ErrorKind.NETWORK -> {
         if (policy.stopWhenOffline && !isOnline()) {
           userWantsPlay = false
-          overlay?.onPlaybackEnded()
-          ctrl.player.pause()
-          emit(
+          settlePlayback(
             Events.PLAYBACK_ERROR,
             mapOf(
               "key" to key,
@@ -1161,9 +1172,7 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     val maySkip = policy.maySkip(skippedThisSession)
     if (!maySkip) {
       userWantsPlay = false
-      overlay?.onPlaybackEnded()
-      ctrl.player.pause()
-      emit(
+      settlePlayback(
         Events.PLAYBACK_ERROR,
         mapOf(
           "key" to key,
@@ -1183,8 +1192,10 @@ class PlayerService : MediaLibraryService(), PlaybackController.Callbacks {
     store.moveTo(index)
     if (store.size() <= 1) {
       userWantsPlay = false
-      ctrl.player.pause()
-      emit(Events.QUEUE_ENDED, mapOf("reason" to EndReason.EXHAUSTED, "index" to index, "revision" to store.currentRevision()))
+      settlePlayback(
+        Events.QUEUE_ENDED,
+        mapOf("reason" to EndReason.EXHAUSTED, "index" to index, "revision" to store.currentRevision())
+      )
       refreshState()
       return
     }

@@ -252,6 +252,28 @@ describe('#775 JS 歌词推送器（宿主级）', () => {
     expect(last).toEqual({ trackKey: 'L', lines: [] });
   });
 
+  it('原生 media transition 后强制重推当前表（过渡前推的表会被原生按 trackKey 丢弃）', async () => {
+    const { overlay, playerStore, lyricsStore, settingsStore } = await load();
+    settingsStore.useSettingsStore.setState({ floatingLyricsEnabled: true });
+    lyricsStore.initLyricsHost();
+    overlay.initLyricOverlay();
+
+    const a = song('A', '[00:01.00]hello');
+    playerStore.usePlayerStore.setState({ currentSong: a, queue: [a], currentIndex: 0 });
+    await flush();
+    fake.calls.setLines.length = 0;
+
+    fake.emit('trackChanged', {
+      fromKey: 'A', toKey: 'A', songId: 'A', index: 0, reason: 'restore', revision: 1,
+    });
+    await flush();
+
+    expect(fake.calls.setLines.at(-1)).toEqual({
+      trackKey: 'A',
+      lines: [{ time: 1, text: 'hello' }],
+    });
+  });
+
   it('serviceState 变化（服务重启）重灌意图并重推当前表', async () => {
     const { overlay, playerStore, lyricsStore, settingsStore } = await load();
     settingsStore.useSettingsStore.setState({ floatingLyricsEnabled: true });

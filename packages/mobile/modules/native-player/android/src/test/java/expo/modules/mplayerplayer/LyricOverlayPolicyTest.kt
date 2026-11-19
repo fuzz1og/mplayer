@@ -33,6 +33,8 @@ class LyricOverlayPolicyTest {
       enabled = true,
       permission = false,
       attached = false,
+      attachedToWindow = false,
+      shown = false,
       activityForeground = true
     )
     assertEquals("开关保持 on，权限与挂载态如实为 false", true, state.enabled)
@@ -69,7 +71,7 @@ class LyricOverlayPolicyTest {
 
   @Test
   fun permissionRevokedCollapsesAttachedStateButKeepsIntent() {
-    val before = LyricOverlayPolicy.state(true, true, true, true)
+    val before = LyricOverlayPolicy.state(true, true, true, true, true, true)
     assertTrue(before.attached)
     assertTrue(before.touchable)
 
@@ -77,6 +79,8 @@ class LyricOverlayPolicyTest {
       enabled = true,
       permission = false,
       attached = false,
+      attachedToWindow = false,
+      shown = false,
       activityForeground = true
     )
     assertTrue("撤销只移除窗口，开关保持 on", after.enabled)
@@ -93,7 +97,28 @@ class LyricOverlayPolicyTest {
 
   @Test
   fun attachedStateRequiresPermission() {
-    assertFalse("窗口在但权限撤销 → attached=false（双检兜底）", LyricOverlayPolicy.state(true, false, true, false).attached)
+    assertFalse(
+      "窗口在但权限撤销 → attached=false（双检兜底）",
+      LyricOverlayPolicy.state(true, false, true, true, true, false).attached
+    )
+  }
+
+  @Test
+  fun attachedStateRequiresRealWindowVisibility() {
+    // addView 不抛异常，但系统把窗口藏起来（权限撤销的常见形态）→ 不算 attached
+    assertFalse(
+      "attach 标记为真但 view 未挂到窗口",
+      LyricOverlayPolicy.state(true, true, true, false, false, true).attached
+    )
+    assertFalse(
+      "attach 标记为真但 view 被系统隐藏",
+      LyricOverlayPolicy.state(true, true, true, true, false, true).attached
+    )
+    assertTrue(
+      "权限 + addView + 窗口真实可见才算 attached",
+      LyricOverlayPolicy.state(true, true, true, true, true, true).attached
+    )
+    assertFalse("附带不可见时 touchable 也必须落 false", LyricOverlayPolicy.state(true, true, true, true, false, true).touchable)
   }
 
   @Test
@@ -106,7 +131,7 @@ class LyricOverlayPolicyTest {
 
   @Test
   fun stateMapMatchesSharedContractKeys() {
-    val map = LyricOverlayPolicy.state(true, true, true, false).toMap()
+    val map = LyricOverlayPolicy.state(true, true, true, true, true, false).toMap()
     assertEquals(setOf("enabled", "permission", "attached", "touchable"), map.keys)
     assertEquals(true, map["enabled"])
     assertEquals(true, map["permission"])

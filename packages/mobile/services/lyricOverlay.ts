@@ -57,6 +57,13 @@ export function initLyricOverlay(): void {
     syncLyricOverlay();
   });
 
+  // JS 可能在原生 media transition 之前就推出新曲的表（歌词缓存命中 / 队列由 JS 先行更新）：
+  // 原生按 trackKey ≠ 当前曲丢弃后不会再要一次 → 过渡完成时强制重推，否则整首空白。
+  player.addListener('trackChanged', () => {
+    lastPushedSignature = null;
+    syncLyricOverlay(true);
+  });
+
   useSettingsStore.subscribe((state, previous) => {
     if (state.floatingLyricsEnabled !== previous.floatingLyricsEnabled) {
       pushEnabledIntent(state.floatingLyricsEnabled);

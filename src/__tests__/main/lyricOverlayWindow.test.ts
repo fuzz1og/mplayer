@@ -286,6 +286,46 @@ describe('悬浮歌词窗口控制器（#765 / #766 / #769）', () => {
     expect(missingDisplay.windows[0].bounds).toEqual({ x: 700, y: 904, width: 520, height: 112 });
   });
 
+  it('冷启动无内存位置时恢复有记录的显示器（可能不是主屏）', async () => {
+    const loadStoredBounds = vi.fn(async () => ({
+      '2': { x: 2000, y: 200, width: 520, height: 112 },
+    }));
+    const { controller, windows } = setup({ loadStoredBounds });
+    await controller.init();
+    controller.applySnapshot(snapshot());
+    expect(windows[0].bounds).toEqual({ x: 2000, y: 200, width: 520, height: 112 });
+  });
+
+  it('坏存档读取失败不阻断启动：回主屏默认位', async () => {
+    const loadStoredBounds = vi.fn(async () => {
+      throw new Error('corrupt store');
+    });
+    const { controller, windows } = setup({ loadStoredBounds });
+    await expect(controller.init()).resolves.toBeUndefined();
+    controller.applySnapshot(snapshot());
+    expect(windows[0].bounds).toEqual({ x: 700, y: 904, width: 520, height: 112 });
+  });
+
+  it('隐藏前把最后一份快照送达覆盖层（重显不闪旧词）', async () => {
+    const { controller, windows } = setup();
+    await controller.init();
+    controller.applySnapshot(snapshot());
+    ready(windows);
+    const window = windows[0];
+    const order: string[] = [];
+    window.webContents.send.mockImplementation(() => order.push('send'));
+    window.hide = vi.fn(() => {
+      order.push('hide');
+      window.visible = false;
+    });
+
+    const hidden = snapshot({ visible: false, lyricsText: '', positionSec: 0 });
+    controller.applySnapshot(hidden);
+
+    expect(order).toEqual(['send', 'hide']);
+    expect(window.webContents.send).toHaveBeenCalledWith(CHANNEL, hidden);
+  });
+
   it('字号档位变化：保留左上角、换尺寸并夹紧，且不触发位置持久化', async () => {
     const { controller, windows, deps } = setup();
     await controller.init();

@@ -93,6 +93,8 @@ export class LyricOverlayWindowController {
     }
     this.applySize(snapshot.lyricsSize);
     if (!snapshot.visible) {
+      // 隐藏前也要送达最后一份快照：否则隐藏文档保留上一首的行 / 定时器，重显首帧会闪旧词。
+      this.sendSnapshot(snapshot);
       this.hideWindow();
       return;
     }
@@ -121,13 +123,25 @@ export class LyricOverlayWindowController {
     this.destroyWindow();
   }
 
+  /**
+   * 冷启动（无内存位置）的落点显示器：主屏有记录用主屏；否则用记录所在的显示器；
+   * 都没有（缺屏 / 首次运行）回落主屏底部居中。
+   */
+  private restoreDisplay(): Display {
+    const primary = this.deps.getPrimaryDisplay();
+    if (this.stored[String(primary.id)]) return primary;
+    const recorded = this.deps
+      .getDisplays()
+      .find((display) => this.stored[String(display.id)] !== undefined);
+    return recorded ?? primary;
+  }
+
   private createWindow(sizeKey: LyricsSize): void {
     const size = LYRIC_OVERLAY_SIZES[sizeKey];
-    const primary = this.deps.getPrimaryDisplay();
     const displays = this.deps.getDisplays();
     const display = this.lastBounds
-      ? displayContainingBounds(this.lastBounds, displays, primary)
-      : primary;
+      ? displayContainingBounds(this.lastBounds, displays, this.deps.getPrimaryDisplay())
+      : this.restoreDisplay();
     const bounds = this.lastBounds
       ? clampBoundsToWorkArea({ x: this.lastBounds.x, y: this.lastBounds.y, ...size }, display.workArea)
       : resolveBounds(this.stored[String(display.id)], display.workArea, size);

@@ -21,6 +21,20 @@ export function parseOverlayLines(lyricsText: string): LyricLine[] {
   }
 }
 
+/** 歌词文本 → 行表的进程内 memo：250ms 走表只改位置，不该反复 parseLRC。 */
+export class OverlayLyricsMemo {
+  private text: string | null = null;
+  private lines: LyricLine[] = [];
+
+  linesFor(lyricsText: string): LyricLine[] {
+    if (lyricsText !== this.text) {
+      this.text = lyricsText;
+      this.lines = parseOverlayLines(lyricsText);
+    }
+    return this.lines;
+  }
+}
+
 export function deriveOverlayLines(lines: readonly LyricLine[], positionSec: number): OverlayLines {
   if (lines.length === 0) return { current: '', next: '' };
   const index = findCurrentLyricIndex(lines, positionSec);

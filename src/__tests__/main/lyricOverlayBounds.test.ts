@@ -29,6 +29,11 @@ describe('悬浮歌词位置计算（#765 / #769）', () => {
       .toEqual({ x: 0, y: 0, width: 520, height: 112 });
   });
 
+  it('workArea 比条高 + 底边距还矮时夹到 workArea（高度不越界、纵坐标不越顶）', () => {
+    const short = { x: 0, y: 0, width: 400, height: 100 };
+    expect(defaultBoundsForDisplay(short, SIZE)).toEqual({ x: 0, y: 0, width: 400, height: 100 });
+  });
+
   it('无记录 = 默认位', () => {
     expect(resolveBounds(undefined, WORK_AREA, SIZE)).toEqual(defaultBoundsForDisplay(WORK_AREA, SIZE));
   });
