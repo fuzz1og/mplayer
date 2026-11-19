@@ -100,6 +100,29 @@ describe('replaceQueueSong（换源后队列原位替换）', () => {
     expect(audioPlayerMock.player.play).toHaveBeenCalled();
   });
 
+  it('swapping the playing song clears old lyrics in the same tick (#764)', async () => {
+    const s1 = song('netease:1', '晴天');
+    const swapped = { ...s1, id: 'qq:1', sourceType: 'qq' as const, url: 'https://audio.qq.com/1.mp3' };
+    usePlayerStore.setState({
+      currentPlaylist: [s1],
+      currentPlaylistIndex: 0,
+      currentSong: s1,
+      lyrics: '[00:01.00]旧歌词',
+    });
+
+    // 覆盖层订阅 store，同步看到每一份中间态：不许出现「新歌 id + 上一首歌词」的帧
+    const observed: { songId: string | null; lyrics: string }[] = [];
+    const unsubscribe = usePlayerStore.subscribe((state) => {
+      observed.push({ songId: state.currentSong?.id ?? null, lyrics: state.lyrics });
+    });
+    await usePlayerStore.getState().replaceQueueSong(s1.id, swapped);
+    unsubscribe();
+
+    expect(usePlayerStore.getState().currentSong?.id).toBe('qq:1');
+    expect(usePlayerStore.getState().lyrics).toBe('');
+    expect(observed.filter((state) => state.songId === 'qq:1' && state.lyrics !== '')).toEqual([]);
+  });
+
   it('continues playback when the song is playing but not in the queue', async () => {
     const s1 = song('netease:1', '晴天');
     const swapped = { ...s1, id: 'qq:1', sourceType: 'qq' as const, url: 'https://audio.qq.com/1.mp3' };

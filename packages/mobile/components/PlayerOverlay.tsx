@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useRef, useState, memo, type ComponentRef, type ComponentType, type ReactNode } from 'react';
 import {
-  View, Text, StyleSheet, FlatList, ScrollView,
+  View, Text, StyleSheet, FlatList, ScrollView, Switch,
   Animated, Alert, BackHandler, useWindowDimensions, Easing,
 } from 'react-native';
 import type { NativeSyntheticEvent, NativeScrollEvent, StyleProp, TextStyle, ViewStyle } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import MaskedViewBase from '@react-native-masked-view/masked-view';
 import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music, MicVocal, ListMusic, MessageSquareText, Disc3, X, MoreVertical } from 'lucide-react-native';
+import { ChevronDown, SkipBack, CirclePlay, CirclePause, SkipForward, Repeat1, Repeat, Shuffle, Heart, CirclePlus, Download, Music, MicVocal, ListMusic, MessageSquareText, Disc3, X, MoreVertical, Captions } from 'lucide-react-native';
 import type { LucideIcon } from 'lucide-react-native';
 import { StatusBar } from 'expo-status-bar';
 import Slider from '@react-native-community/slider';
@@ -21,12 +21,14 @@ import { downloadSong } from '../services/downloadService';
 import AddToPlaylistModal from './AddToPlaylistModal';
 import QueueListModal from './QueueListModal';
 import BottomSheet from './BottomSheet';
-import { parseLRC, musicApi, findCurrentLyricIndex, planLyricsFetch } from '@mplayer/core';
+import { findCurrentLyricIndex } from '@mplayer/core';
 import type { LyricLine } from '@mplayer/core';
 import { useSettingsStore, PLAY_MODES } from '../stores/settingsStore';
 import type { PlayMode } from '../stores/settingsStore';
+import { useLyricsStore } from '../stores/lyricsStore';
+import { useLyricOverlayStore } from '../stores/lyricOverlayStore';
+import { setLyricOverlayEnabled, openLyricOverlaySettings } from '../services/lyricOverlay';
 import { SOURCE_LABELS } from '../stores/sourceStore';
-import { useLogsStore } from '../stores/logsStore';
 import {radius, shadow, spacing, textVariants, turntable, playerForeground, playerBackground} from '../theme/tokens';
 import type { ThemeColors } from '../theme/tokens';
 import { useTheme } from '../theme/ThemeProvider';
@@ -69,6 +71,8 @@ const LYRICS_FULL_LINE_H = 44;
  */
 const LYRICS_PREVIEW_FONT_SIZE = 13;
 const LYRICS_FULL_FONT_SIZE = 16;
+/** 歌词尚未属于当前曲时的稳定空引用（避免每次渲染新建数组触发 selector 抖动） */
+const EMPTY_LYRICS: LyricLine[] = [];
 
 interface Props {
   onClose: () => void;
@@ -90,8 +94,16 @@ export default function PlayerOverlay({ onClose }: Props) {
   const removeFavorite = useFavoriteStore(s => s.removeFavorite);
   const playMode = useSettingsStore(s => s.playMode);
   const setPlayMode = useSettingsStore(s => s.setPlayMode);
+  // 歌词由宿主级 lyricsStore 供给（#775）：浮窗与全屏播放器共用同一份 planLyricsFetch 结果
+  const lyricsSongId = useLyricsStore(s => s.songId);
+  const storedLyricLines = useLyricsStore(s => s.lines);
+  const lyricLines = lyricsSongId === song?.id ? storedLyricLines : EMPTY_LYRICS;
+  const lyricsLoading = useLyricsStore(s => s.loading) && lyricsSongId === song?.id;
+  // Android 浮窗（#775）：开关 = 持久意图；权限态只影响状态行，不反向改开关
+  const floatingLyricsEnabled = useSettingsStore(s => s.floatingLyricsEnabled);
+  const overlaySupported = useLyricOverlayStore(s => s.supported);
+  const overlayPermission = useLyricOverlayStore(s => s.permission);
 
-  const [lyricLines, setLyricLines] = useState<LyricLine[]>([]);
   const [currentLineIdx, setCurrentLineIdx] = useState(-1);
   const [showLyrics, setShowLyrics] = useState(false);
   // 最新值 ref：PanResponder release 闭包可能拿到 stale state（连续快滑时组件未重渲染），
@@ -108,7 +120,6 @@ export default function PlayerOverlay({ onClose }: Props) {
   // #186 #10：唱臂起落——播放落臂 / 暂停抬臂，Animated.Value 0=抬 1=落
   const tonearm = useRef(new Animated.Value(0)).current;
   const panY = useRef(new Animated.Value(winH)).current;
-  const lyricCache = useRef(new Map<string, LyricLine[]>()).current;
   const onCloseRef = useRef(onClose);
   // 退场幂等闸：重复触发（手势 + 按钮 / 连点）不得重启退场动画——重启会打断
   // 前一次 Animated.parallel，使其 finished=false，于是 onClose 永不触发，
@@ -276,81 +287,7 @@ export default function PlayerOverlay({ onClose }: Props) {
     }
   };
 
-  // 加载歌词：songid 直取源（网易 #409 / 汽水）按源内 ID 直取；其余源优先歌曲自带
-  // lrc URL（取词 URL）。存量数据里网易的 lrc 仍可能是内联文本，由 isInlineLyrics 兜住。
-  const [lyricsLoading, setLyricsLoading] = useState(false);
-  useEffect(() => {
-    if (!song) { setLyricLines([]); setLyricsLoading(false); return; }
-    // #409 埋点：[耗时] 歌词就绪——本票把歌词从「列表内联」改成「播放期按 ID 直取」，
-    // 首行延迟从 0 变成一次 RTT，必须可观测（与仓里 [耗时] 播放器就绪同约定）。
-    const lyricsT0 = Date.now();
-    // 取词决策由 core `planLyricsFetch` 单点给出（与下载侧车共用同一份，防漂移）。
-    const plan = planLyricsFetch(song);
-    const logKind = () => (plan.kind === 'inline'
-      ? 'inline(存量)'
-      : plan.kind === 'url'
-        ? 'url'
-        : plan.kind === 'songid'
-          ? `songid:${plan.source}`
-          : 'none');
-    const abort = new AbortController();
-    // 网易/汽水（#409）：列表结果 lrc 恒空 → cacheKey 走 songid，播放期按源内 ID 直取；
-    // 存量数据的内联文本走 inline；其余源 lrc 为取词 URL（getLyrics 门面）。
-    const cacheKey = plan.kind === 'inline'
-      ? `inline:${song.id}`
-      : plan.kind === 'url'
-        ? plan.url
-        : plan.kind === 'songid' ? `songid:${song.id}` : '';
-    if (!cacheKey) {
-      setLyricLines([]);
-      setLyricsLoading(false);
-      // 热榜点播的搜索腿可能未命中（lrc 空）→ 后台搜索补 lrc，回填后本 effect 重跑
-      void fetchLrcInBackground(song, true);
-      return;
-    }
-    const cached = lyricCache.get(cacheKey);
-    if (cached) {
-      setLyricLines(cached);
-      setLyricsLoading(false);
-      useLogsStore.getState().addLog('info', `[耗时] 歌词就绪(会话缓存): 《${song.name}》 ${Date.now() - lyricsT0}ms · ${logKind()} · ${cached.length} 行`);
-      return;
-    }
-    setLyricsLoading(true);
-    const load = plan.kind === 'inline'
-      ? Promise.resolve(plan.text)
-      : plan.kind === 'url'
-        ? musicApi.getLyrics(plan.url)
-        : plan.kind === 'songid'
-          ? plan.source === 'soda'
-            ? musicApi.getSodaLyrics(plan.id)
-            : musicApi.getNeteaseLyrics(plan.id)
-          : Promise.resolve('');
-    load.then(lrc => {
-      if (abort.signal.aborted) return;
-      const parsed = parseLRC(lrc);
-      lyricCache.set(cacheKey, parsed.lines);
-      setLyricLines(parsed.lines);
-      useLogsStore.getState().addLog(
-        'info',
-        `[耗时] 歌词就绪: 《${song.name}》 ${Date.now() - lyricsT0}ms · ${logKind()} · ${parsed.lines.length} 行`,
-      );
-      // 拿到空词（lrc URL 被拒/无词）≠ 加载失败不抛错：非网易源再给搜索兜底
-      // 一次机会（网易 by-id 已是权威答案，纯音乐不再白搜）。结果同 URL 时
-      // fetchLrcInBackground 内部按无变化返回，不会循环。
-      if (parsed.lines.length === 0 && song.sourceType !== 'netease') {
-        void fetchLrcInBackground(song, true);
-      }
-    }).catch(() => {
-      if (!abort.signal.aborted) {
-        setLyricLines([]);
-        // 歌曲自带 lrc URL 可能已失效（歌单/收藏缓存）→ 强制搜索兜底补歌词
-        void fetchLrcInBackground(song, true);
-      }
-    }).finally(() => {
-      if (!abort.signal.aborted) setLyricsLoading(false);
-    });
-    return () => abort.abort();
-  }, [song?.lrc, song?.id]);
+  // 歌词加载已上移到宿主级 stores/lyricsStore（#775）：浮窗与全屏播放器共用同一份取词结果
 
   // 歌词高亮同步：下沉到 LyricSyncer 叶子组件（订阅 currentTime 的地方尽量小——
   // 每 250ms 心跳只重渲染 syncer 自己，不再打整棵全屏播放器树）
@@ -382,6 +319,33 @@ export default function PlayerOverlay({ onClose }: Props) {
         console.error('[player]', `下载失败《${song.name}》:`, e);
         Alert.alert('下载失败', `《${song.name}》: ${e instanceof Error ? e.message : String(e)}`);
       });
+  };
+
+  /** 首次开启先引导；「去设置」才把持久意图置 on，「取消」保持 off（#768）。 */
+  const handleFloatingLyricsToggle = (next: boolean) => {
+    tapLight();
+    if (!next) {
+      setLyricOverlayEnabled(false);
+      return;
+    }
+    if (overlayPermission) {
+      setLyricOverlayEnabled(true);
+      return;
+    }
+    Alert.alert(
+      '开启歌词浮窗',
+      '需要允许 MPlayer「显示在其他应用上层」，播放时歌词才能悬浮在其他应用之上。',
+      [
+        { text: '取消', style: 'cancel' },
+        {
+          text: '去设置',
+          onPress: () => {
+            setLyricOverlayEnabled(true);
+            openLyricOverlaySettings();
+          },
+        },
+      ],
+    );
   };
 
   const handlePrev = () => {
@@ -862,6 +826,30 @@ export default function PlayerOverlay({ onClose }: Props) {
           <Download size={20} color={colors.textSecondary} />
           <Text style={styles.moreItemText}>下载</Text>
         </ScalePress>
+        {overlaySupported && (
+          <>
+            <View style={styles.moreRow}>
+              <View style={styles.moreLabel}>
+                <Captions size={20} color={colors.textSecondary} />
+                <Text style={styles.moreItemText}>歌词浮窗</Text>
+              </View>
+              <Switch
+                value={floatingLyricsEnabled}
+                onValueChange={handleFloatingLyricsToggle}
+                accessibilityLabel="歌词浮窗"
+              />
+            </View>
+            {floatingLyricsEnabled && !overlayPermission && (
+              <ScalePress
+                style={styles.moreHint}
+                onPress={openLyricOverlaySettings}
+                accessibilityLabel="去开启悬浮窗权限"
+              >
+                <Text style={styles.moreHintText}>去开启「显示在其他应用上层」权限</Text>
+              </ScalePress>
+            )}
+          </>
+        )}
       </BottomSheet>
     </SafeAreaView>
   );
@@ -1116,6 +1104,15 @@ const makeStyles = (colors: ThemeColors, fg: PlayerFg) => StyleSheet.create({
     paddingVertical: spacing[3],
   },
   moreItemText: { ...textVariants.body, color: colors.textPrimary, marginLeft: spacing[3] },
+  moreRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingVertical: spacing[3],
+  },
+  moreLabel: { flexDirection: 'row', alignItems: 'center' },
+  moreHint: { paddingBottom: spacing[2] },
+  moreHintText: { ...textVariants.footnote, color: colors.accent },
   // 词/封切换图标对（#186 #9）
   toggleGroup: {
     flexDirection: 'row',

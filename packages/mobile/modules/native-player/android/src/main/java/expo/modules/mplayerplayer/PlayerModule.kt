@@ -2,6 +2,12 @@
 
 package expo.modules.mplayerplayer
 
+import android.app.ActivityManager
+import android.content.Context
+import android.content.Intent
+import android.net.Uri
+import android.os.Build
+import android.provider.Settings
 import com.facebook.react.bridge.ReactContext
 import expo.modules.kotlin.exception.CodedException
 import expo.modules.kotlin.modules.Module
@@ -80,6 +86,15 @@ class PolicyInput : Record {
   /** #666 曲末策略表；null = 缺表（冷启 / 老版 JS）→ 原生走内联兜底。兜底是默认，不是例外。 */
   @Field
   var endOfTrack: EndOfTrackPolicyInput? = null
+}
+
+/** `setLyricLines` 的单行入参（秒）；一期不带 `words`（规格 2026-11-19-lyric-overlay §6.1）。 */
+class LyricLineInput : Record {
+  @Field
+  var time: Double = 0.0
+
+  @Field
+  var text: String = ""
 }
 
 class LoadQueueInput : Record {
@@ -227,6 +242,70 @@ class PlayerModule : Module() {
     Function("setPolicy") { policy: PolicyInput -> withService { it.setPolicy(policy.toSnapshot()) } }
 
     Function("stop") { withService { it.stop() } }
+
+    // ── 歌词浮窗（#775 / ADR 2026-11-19-android-lyric-overlay-service）──
+
+    Function("isLyricOverlaySupported") {
+      val context = overlayContext() ?: return@Function false
+      Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !isLowRamDevice(context)
+    }
+
+    Function("canDrawOverlays") {
+      val context = overlayContext() ?: return@Function false
+      LyricOverlaySettings.canDrawOverlays(context)
+    }
+
+    Function("openOverlaySettings") {
+      val context = overlayContext()
+      if (context != null && Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+        try {
+          val intent = Intent(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${context.packageName}")
+          ).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+          context.startActivity(intent)
+        } catch (_: Throwable) {
+          // 无对应系统页的 ROM 上保持无操作；入口不崩、不循环弹
+        }
+      }
+      true
+    }
+
+    /** 只持久化意图；无权限不 addView、不抛错（规格 §6.2 / #768）。 */
+    Function("setLyricOverlayEnabled") { enabled: Boolean ->
+      val context = overlayContext()
+      context?.let { LyricOverlaySettings.setEnabled(it, enabled) }
+      PlayerBridge.service?.setLyricOverlayEnabled(enabled) ?: overlaySnapshot(context)
+    }
+
+    Function("getLyricOverlayState") {
+      PlayerBridge.service?.lyricOverlayState() ?: overlaySnapshot(overlayContext())
+    }
+
+    /** 不受开关门控：服务存活就缓存整表；服务不在时靠 serviceState 回推（规格 §6.2）。 */
+    Function("setLyricLines") { trackKey: String, lines: List<LyricLineInput> ->
+      PlayerBridge.service?.setLyricLines(
+        trackKey,
+        lines.map { OverlayLyricLine(it.time, it.text) }
+      )
+      Unit
+    }
+  }
+
+  private fun overlayContext(): Context? =
+    appContext.reactContext ?: appContext.currentActivity?.applicationContext
+
+  private fun overlaySnapshot(context: Context?): Map<String, Any?> = mapOf(
+    "enabled" to (context?.let { LyricOverlaySettings.isEnabled(it) } ?: false),
+    "permission" to (context != null && LyricOverlaySettings.canDrawOverlays(context)),
+    "attached" to false,
+    "touchable" to false
+  )
+
+  private fun isLowRamDevice(context: Context): Boolean = try {
+    (context.getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager).isLowRamDevice
+  } catch (_: Throwable) {
+    false
   }
 
   /** AsyncFunction（后台线程）可用：拉起服务并等它就绪。 */

@@ -42,6 +42,11 @@ interface SettingsState {
   autoSkipOnError: boolean;
   /** 开发者模式（#477）：显式开关，默认关；开 = 诊断详细度 verbose（info 进日志缓冲）+ 设置页出现诊断面板 */
   devMode: boolean;
+  /**
+   * Android 歌词浮窗的持久意图（#775）：默认关。原生 SharedPreferences 由 services/lyricOverlay
+   * 单向回灌；attached / 权限态不持久化。
+   */
+  floatingLyricsEnabled: boolean;
   setProxyUrl: (url: string) => void;
   setPlayMode: (mode: PlayMode) => void;
   setDownloadDirUri: (uri: string) => void;
@@ -53,6 +58,7 @@ interface SettingsState {
   setThemeMode: (mode: ThemeMode) => void;
   setAutoSkipOnError: (enabled: boolean) => void;
   setDevMode: (enabled: boolean) => void;
+  setFloatingLyricsEnabled: (enabled: boolean) => void;
 }
 
 export const useSettingsStore = create<SettingsState>()(
@@ -69,6 +75,7 @@ export const useSettingsStore = create<SettingsState>()(
       themeMode: 'system',
       autoSkipOnError: true,
       devMode: false,
+      floatingLyricsEnabled: false,
       setProxyUrl: (url) => set({ proxyUrl: url }),
       setPlayMode: (mode) => set({ playMode: mode }),
       setDownloadDirUri: (uri) => set({ downloadDirUri: uri }),
@@ -80,6 +87,7 @@ export const useSettingsStore = create<SettingsState>()(
       setThemeMode: (mode) => set({ themeMode: mode }),
       setAutoSkipOnError: (enabled) => set({ autoSkipOnError: enabled }),
       setDevMode: (enabled) => set({ devMode: enabled }),
+      setFloatingLyricsEnabled: (enabled) => set({ floatingLyricsEnabled: enabled }),
     }),
     {
       name: 'settings-storage',

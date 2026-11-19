@@ -1,19 +1,12 @@
 import { ipcMain } from 'electron';
 import type { ApiResponse } from '@/shared/types/ipc';
+import { checkTrustedSenderFrame } from './trustedSender';
 
 type AsyncHandler<T, A extends any[]> = (...args: A) => Promise<T>;
 
-/**
- * IPC 来源可信校验（审查修复）：只信任应用自身页面（file:// 生产 / dev server 开发）。
- * 渲染层被注入时，senderFrame.url 为恶意来源 → 拦截，返回失败封套。
- * 测试直接调用 handler（无 event/senderFrame）时放行，保持测试可驱动。
- */
+/** 与 main.ts 共用同一份收紧后的信任面（dist / dev 同源，见 trustedSender.ts）。 */
 function isTrustedSender(frame: Electron.WebFrameMain | null | undefined): boolean {
-  if (!frame) return true; // 非真实 IPC 调用（测试直接调用）
-  const url = frame.url || '';
-  if (url.startsWith('file://')) return true;
-  if (process.env.VITE_DEV_SERVER_URL && url.startsWith(process.env.VITE_DEV_SERVER_URL)) return true;
-  return false;
+  return checkTrustedSenderFrame(frame) === null;
 }
 
 export function registerIpcHandler<T, A extends any[] = []>(

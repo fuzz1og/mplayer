@@ -20,6 +20,7 @@ import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 import { initAppearancePrefs } from '@/renderer/theme/appearancePrefs';
+import { startLyricOverlaySync } from '@/renderer/services/lyricOverlay';
 
 import './styles/app-shell.css';
 
@@ -119,6 +120,9 @@ const App: React.FC = () => {
   // 组件挂载时加载收藏列表
   // 外观偏好（密度/材质/字号/动效/歌词字号）落 <html data-*>：冷启动就应用，不必进设置页
   useEffect(() => { void initAppearancePrefs(); }, []);
+
+  // 悬浮歌词：主窗渲染层是唯一状态源，进入 App 即接快照推送（#766）
+  useEffect(() => startLyricOverlaySync(), []);
 
   useEffect(() => {
     loadFavorites();
@@ -256,7 +260,12 @@ const App: React.FC = () => {
           {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
               现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
           <ErrorBoundary>
-            {showLyrics && !isSettings ? <LyricsPage onBack={handleCloseLyrics} /> : <Outlet />}
+            {/* 页面层常驻：歌词层只是盖在内容区上的一层（#688）。卸载 Outlet 会让
+                推荐页等每次返回都重新挂载并重新请求，返回时只剩骨架屏。 */}
+            <div className="app-shell__page" hidden={isNowPlaying}>
+              <Outlet />
+            </div>
+            {showLyrics && !isSettings ? <LyricsPage onBack={handleCloseLyrics} /> : null}
           </ErrorBoundary>
         </main>
       </div>

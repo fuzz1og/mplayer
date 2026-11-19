@@ -77,7 +77,8 @@ describe('歌词层跟随导航复位（#403）', () => {
     renderApp();
     fireEvent.click(screen.getByText('播放栏封面'));
     expect(screen.getByText('歌词层')).toBeTruthy();
-    expect(screen.queryByText('发现页')).toBeNull();
+    // 页面层保持挂载但 hidden：歌词盖在内容区上，页面实例不卸载（返回推荐页不再重新请求）。
+    expect(screen.getByText('发现页').closest('[hidden]')).not.toBeNull();
 
     fireEvent.click(screen.getByText('侧边栏设置'));
 

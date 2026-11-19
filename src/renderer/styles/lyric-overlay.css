@@ -1,0 +1,105 @@
+/* 悬浮歌词覆盖层（固定深色，视觉 token 见 #770 决议）：窗口紧贴胶囊条，条外全透明。 */
+
+:root {
+  --overlay-pill-bg: rgba(16, 16, 20, 0.62); /* design-lint: ok：固定深色视觉，#770 决议 */
+  --overlay-pill-border: rgba(255, 255, 255, 0.09); /* design-lint: ok：固定深色视觉，#770 决议 */
+  --overlay-text: rgba(255, 255, 255, 0.99); /* design-lint: ok：固定深色视觉，#770 决议；0.99 规避全不透明文字层的合成丢失 */
+  --overlay-next-text: rgba(255, 255, 255, 0.62); /* design-lint: ok：固定深色视觉，#770 决议 */
+  --overlay-current-shadow: 0 1px 3px rgba(0, 0, 0, 0.85), 0 0 14px rgba(0, 0, 0, 0.45); /* design-lint: ok：固定深色视觉，#770 决议 */
+  --overlay-next-shadow: 0 1px 2px rgba(0, 0, 0, 0.6); /* design-lint: ok：固定深色视觉，#770 决议 */
+  --overlay-hover-outline: rgba(127, 176, 245, 0.75); /* design-lint: ok：#770 拖拽反馈色 */
+  --overlay-current-font-size: 20px; /* design-lint: ok：#770 定稿值，覆盖层独立于主窗字号 token */
+  --overlay-current-font-weight: 700; /* design-lint: ok：#770 定稿值 */
+  --overlay-next-font-size: 14px; /* design-lint: ok：#770 定稿值 */
+  --overlay-next-font-weight: 500; /* design-lint: ok：#770 定稿值 */
+  --overlay-line-height: 1.35; /* design-lint: ok：#770 定稿值 */
+  --overlay-radius: 16px;
+  --overlay-pill-gap: 2px;
+  --overlay-hover-inset: 3px;
+}
+
+html,
+body {
+  height: 100%;
+  margin: 0;
+  overflow: hidden;
+  background: transparent;
+}
+
+body {
+  font-family: "Segoe UI", "Microsoft YaHei", system-ui, sans-serif;
+  user-select: none;
+}
+
+#lyric-overlay-root {
+  height: 100%;
+}
+
+.lyric-overlay {
+  box-sizing: border-box;
+  display: flex;
+  height: 100%;
+  padding: var(--overlay-hover-inset);
+  -webkit-app-region: drag;
+  cursor: grab;
+}
+
+.lyric-overlay:active {
+  cursor: grabbing;
+}
+
+.lyric-overlay__pill {
+  box-sizing: border-box;
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--overlay-pill-gap);
+  padding: 0 var(--space-5, 20px);
+  overflow: hidden;
+  background: var(--overlay-pill-bg);
+  border: 1px solid var(--overlay-pill-border);
+  border-radius: var(--overlay-radius);
+}
+
+/* large 档同时放大字号（#769：字号档位影响悬浮歌词；数值为 #770 定稿的等比微调）。 */
+.lyric-overlay[data-size='large'] {
+  --overlay-current-font-size: 22px; /* design-lint: ok：#770 定稿值的 large 微调 */
+  --overlay-next-font-size: 15px; /* design-lint: ok：#770 定稿值的 large 微调 */
+}
+
+.lyric-overlay:hover .lyric-overlay__pill {
+  outline: 3px dashed var(--overlay-hover-outline);
+  outline-offset: 0;
+}
+
+.lyric-overlay__current {
+  display: -webkit-box;
+  min-height: calc(var(--overlay-current-font-size) * var(--overlay-line-height));
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--overlay-text);
+  font-size: var(--overlay-current-font-size);
+  font-weight: var(--overlay-current-font-weight);
+  line-height: var(--overlay-line-height);
+  text-align: center;
+  text-shadow: var(--overlay-current-shadow);
+  overflow-wrap: anywhere;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
+}
+
+.lyric-overlay__next {
+  min-height: calc(var(--overlay-next-font-size) * var(--overlay-line-height));
+  max-width: 100%;
+  overflow: hidden;
+  color: var(--overlay-next-text);
+  font-size: var(--overlay-next-font-size);
+  font-weight: var(--overlay-next-font-weight);
+  line-height: var(--overlay-line-height);
+  text-align: center;
+  text-overflow: ellipsis;
+  text-shadow: var(--overlay-next-shadow);
+  white-space: nowrap;
+}
