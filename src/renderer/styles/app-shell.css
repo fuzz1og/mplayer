@@ -23,6 +23,14 @@
   background: var(--surface-content);
 }
 
+/* 页面层常驻：歌词打开时隐藏但不卸载，返回保留页面状态与滚动位置（避免重新请求）。 */
+.app-shell__page:not([hidden]) {
+  display: contents;
+}
+.app-shell__page[hidden] {
+  display: none;
+}
+
 /* 正在播放：占满标题栏以下整幅宽度；侧栏与普通播放栏让位（footer 由本页自己承担） */
 .app-shell--nowplaying .sidebar,
 .app-shell--nowplaying .player-bar {

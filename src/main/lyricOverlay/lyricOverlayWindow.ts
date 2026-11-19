@@ -161,6 +161,7 @@ export class LyricOverlayWindowController {
       show: false,
       resizable: false,
       fullscreenable: false,
+      // 与 #761 已验证可用的原型窗口参数对齐（desktop-overlay-smoke/main.js）。
       webPreferences: {
         preload: this.deps.preloadPath,
         contextIsolation: true,
@@ -170,6 +171,7 @@ export class LyricOverlayWindowController {
         backgroundThrottling: true,
       },
     });
+    window.setAlwaysOnTop(true, 'screen-saver');
 
     this.window = window;
     this.ready = false;
@@ -214,11 +216,13 @@ export class LyricOverlayWindowController {
     const window = this.window;
     if (!window || window.isDestroyed()) return;
     window.setAlwaysOnTop(true, 'screen-saver');
-    window.moveTop();
     if (!window.isVisible()) {
       window.webContents.setBackgroundThrottling(false);
+      // #761 原型验证过的顺序：先 showInactive 再 moveTop。
+      // 顺序反过来（先 moveTop 再显示）在 Windows 11 + Electron 44 上只合成窗口背景，renderer 内容不出现。
       window.showInactive();
     }
+    window.moveTop();
     this.startKeepAlive();
   }
 

@@ -1,3 +1,4 @@
+import { useEffect, type ReactNode } from 'react';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { fireEvent, render, screen, within } from '@testing-library/react';
 import { MemoryRouter, Route, Routes } from 'react-router-dom';
@@ -67,12 +68,12 @@ const CURRENT = {
   sourceType: 'netease' as const, url: 'https://audio.example.com/n1.mp3', cover: '', lrc: '',
 };
 
-function renderApp() {
+function renderApp(discover: ReactNode = <div>发现页</div>) {
   return render(
     <MemoryRouter initialEntries={['/discover']}>
       <Routes>
         <Route path="/" element={<App />}>
-          <Route path="discover" element={<div>发现页</div>} />
+          <Route path="discover" element={discover} />
           <Route path="recommend" element={<div>推荐页</div>} />
           <Route path="settings" element={<div>设置页</div>} />
         </Route>
@@ -125,6 +126,26 @@ describe('正在播放 → 设置导航闭环（#710）', () => {
     } finally {
       usePlayerStore.setState({ play: originalPlay });
     }
+  });
+
+  it('打开/收起歌词不卸载页面层：返回时页面实例保持挂载', () => {
+    const onMount = vi.fn();
+    const MountProbe = () => {
+      useEffect(() => {
+        onMount();
+      }, []);
+      return <div>发现页</div>;
+    };
+
+    renderApp(<MountProbe />);
+    expect(onMount).toHaveBeenCalledTimes(1);
+
+    fireEvent.click(screen.getByText('播放栏封面'));
+    expect(document.querySelector('[data-now-playing]')).toBeTruthy();
+
+    fireEvent.click(within(screen.getByTestId('titlebar')).getByRole('button', { name: '收起播放器' }));
+    expect(document.querySelector('[data-now-playing]')).toBeNull();
+    expect(onMount).toHaveBeenCalledTimes(1);
   });
 
   it('展开动画中进设置：跳过 ViewTransition 并立即移除正在播放层', async () => {

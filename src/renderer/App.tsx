@@ -260,7 +260,12 @@ const App: React.FC = () => {
           {/* 错误边界包住页面内容：桌面窗口没有刷新/返回键，渲染层抛错此前会整窗变白（只能重启）。
               现在一个页面出错 = 一个页面出错，并给「重试」自救。 */}
           <ErrorBoundary>
-            {showLyrics && !isSettings ? <LyricsPage onBack={handleCloseLyrics} /> : <Outlet />}
+            {/* 页面层常驻：歌词层只是盖在内容区上的一层（#688）。卸载 Outlet 会让
+                推荐页等每次返回都重新挂载并重新请求，返回时只剩骨架屏。 */}
+            <div className="app-shell__page" hidden={isNowPlaying}>
+              <Outlet />
+            </div>
+            {showLyrics && !isSettings ? <LyricsPage onBack={handleCloseLyrics} /> : null}
           </ErrorBoundary>
         </main>
       </div>

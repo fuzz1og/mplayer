@@ -3,7 +3,7 @@ import { fireEvent, render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter, useLocation } from 'react-router-dom';
 import type { DiscoverPlaylist, Song } from '@mplayer/core';
-import RecommendPage from '@/renderer/pages/RecommendPage';
+import RecommendPage, { resetRecommendCacheForTests } from '@/renderer/pages/RecommendPage';
 import { usePlayerStore } from '@/renderer/store/playerStore';
 
 const callMusicApiMock = vi.fn();
@@ -66,6 +66,7 @@ describe('推荐页', () => {
 
   beforeEach(() => {
     vi.clearAllMocks();
+    resetRecommendCacheForTests();
     vi.spyOn(Math, 'random').mockReturnValue(0);
     callMusicApiMock.mockImplementation(async (method: string) => {
       if (method === 'getRecommendedSongs') return songs;
@@ -143,5 +144,17 @@ describe('推荐页', () => {
     expect(container.querySelector('.daily__badge')).toBeNull();
     expect(container.querySelector('.pl-card')).toBeNull();
     expect(container.querySelector('.cover-card__media')).not.toBeNull();
+  });
+
+  it('返回推荐页时命中会话缓存，不重新请求', async () => {
+    const first = renderPage();
+    await waitForPage();
+    expect(callMusicApiMock).toHaveBeenCalledTimes(2);
+
+    first.unmount();
+    renderPage();
+
+    expect(screen.getAllByText('推荐歌1').length).toBeGreaterThan(0);
+    expect(callMusicApiMock).toHaveBeenCalledTimes(2);
   });
 });

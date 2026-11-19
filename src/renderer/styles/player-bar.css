@@ -436,24 +436,18 @@
 
 /* 原来是组件里的 onMouseOver/onMouseOut 直接改 style，改由 CSS 接管 */
 
-/* 悬浮歌词「词」（#765 / #770）：开 = 强调色文字 + 淡强调底 + 强调边；关 = 弱化文字无底。 */
+/* 悬浮歌词「词」：完全沿用 .player-btn 的 32px 圆形、8px padding、flex 居中和 hover 过渡；
+   只调字号/字重对齐相邻 16px 图标。开态只换白色文字，不加底色。 */
 .player-bar__lyrics-toggle {
-  min-width: 30px;
-  padding: var(--space-1) var(--space-2);
-  border: 1px solid transparent;
-  font-size: var(--text-xs);
+  box-sizing: border-box;
+  width: 32px;
+  height: 32px;
+  font-size: var(--text-sm);
   font-weight: var(--weight-medium);
-  line-height: var(--text-sm);
-  color: var(--text-tertiary);
+  color: var(--text-secondary);
 }
 
-.player-bar__lyrics-toggle[aria-pressed='true'] {
-  color: var(--accent-text);
-  background-color: var(--accent-subtle);
-  border-color: var(--accent);
-}
-
+.player-bar__lyrics-toggle[aria-pressed='true'],
 .player-bar__lyrics-toggle[aria-pressed='true']:hover {
-  background-color: var(--accent-subtle);
-  color: var(--accent-text);
+  color: var(--text-primary);
 }

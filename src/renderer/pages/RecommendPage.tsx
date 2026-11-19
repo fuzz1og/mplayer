@@ -22,6 +22,23 @@ import '@/renderer/styles/songlist.css';
 const RECOMMEND_BATCH_SIZE = 5;
 /** 推荐歌单首屏展示上限：与原型一致，避免 30 张卡把页面拉得过长。 */
 const PLAYLIST_VISIBLE_LIMIT = 12;
+/** 推荐数据是当日榜单：会话内缓存 10 分钟，返回页面不再从骨架屏重新请求。 */
+const RECOMMEND_CACHE_TTL_MS = 10 * 60 * 1000;
+
+interface RecommendCacheEntry {
+  playlists: DiscoverPlaylist[];
+  songs: Song[];
+  batch: Song[];
+  usedIndices: number[];
+  fetchedAt: number;
+}
+
+let recommendCache: RecommendCacheEntry | null = null;
+
+/** 仅测试用：模块级缓存在同一测试文件内会跨用例保留。 */
+export function resetRecommendCacheForTests(): void {
+  recommendCache = null;
+}
 
 const RecommendPage: React.FC = () => {
   const navigate = useNavigate();
@@ -30,36 +47,60 @@ const RecommendPage: React.FC = () => {
   const currentSong = usePlayerStore((s) => s.currentSong);
   const isPlaying = usePlayerStore((s) => s.isPlaying);
 
-  const [recommendedPlaylists, setRecommendedPlaylists] = useState<DiscoverPlaylist[]>([]);
-  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>([]);
-  const [loading, setLoading] = useState(true);
+  const cached = recommendCache;
+  const [recommendedPlaylists, setRecommendedPlaylists] = useState<DiscoverPlaylist[]>(cached?.playlists ?? []);
+  const [recommendedSongs, setRecommendedSongs] = useState<Song[]>(cached?.songs ?? []);
+  const [loading, setLoading] = useState(!cached);
   const [error, setError] = useState<string | null>(null);
   // 当前展示的随机批次 + 本轮已用过的池索引（抽完一轮自动重置）
-  const [batch, setBatch] = useState<Song[]>([]);
-  const [usedIndices, setUsedIndices] = useState<number[]>([]);
+  const [batch, setBatch] = useState<Song[]>(cached?.batch ?? []);
+  const [usedIndices, setUsedIndices] = useState<number[]>(cached?.usedIndices ?? []);
 
-  const fetchRecommended = useCallback(async () => {
-    setLoading(true);
+  const fetchRecommended = useCallback(async (background = false) => {
+    if (!background) setLoading(true);
     setError(null);
     try {
       const [playlists, songs] = await Promise.all([
         callMusicApi('getRecommendedPlaylists', 'netease', 30),
         callMusicApi('getRecommendedSongs', 'netease', 100),
       ]);
-      setRecommendedPlaylists(playlists || []);
-      setRecommendedSongs(songs || []);
-      const { batch: firstBatch, used } = pickRandomBatch(songs || [], [], RECOMMEND_BATCH_SIZE);
-      setBatch(firstBatch);
-      setUsedIndices(used);
+      const nextPlaylists = playlists || [];
+      const nextSongs = songs || [];
+      setRecommendedPlaylists(nextPlaylists);
+      setRecommendedSongs(nextSongs);
+      // 后台刷新保留用户当前看到的批次；首次进入才抽新批次。
+      if (background && recommendCache && recommendCache.batch.length > 0) {
+        recommendCache = {
+          playlists: nextPlaylists,
+          songs: nextSongs,
+          batch: recommendCache.batch,
+          usedIndices: recommendCache.usedIndices,
+          fetchedAt: Date.now(),
+        };
+      } else {
+        const { batch: firstBatch, used } = pickRandomBatch(nextSongs, [], RECOMMEND_BATCH_SIZE);
+        setBatch(firstBatch);
+        setUsedIndices(used);
+        recommendCache = {
+          playlists: nextPlaylists,
+          songs: nextSongs,
+          batch: firstBatch,
+          usedIndices: used,
+          fetchedAt: Date.now(),
+        };
+      }
     } catch (err: any) {
-      setError(err?.message || '加载推荐失败');
+      // 有缓存时刷新失败不把已有内容换成错误态，继续展示上次成功的数据。
+      if (!recommendCache) setError(err?.message || '加载推荐失败');
     } finally {
       setLoading(false);
     }
   }, []);
 
   useEffect(() => {
-    fetchRecommended();
+    const current = recommendCache;
+    if (current && Date.now() - current.fetchedAt < RECOMMEND_CACHE_TTL_MS) return;
+    void fetchRecommended(Boolean(current));
   }, [fetchRecommended]);
 
   // 换一批：从大池子随机抽 5 首（本轮不重复，抽完一轮自动重置），今日主打同步换
@@ -68,6 +109,9 @@ const RecommendPage: React.FC = () => {
     const { batch: nextBatch, used } = pickRandomBatch(recommendedSongs, usedIndices, RECOMMEND_BATCH_SIZE);
     setBatch(nextBatch);
     setUsedIndices(used);
+    if (recommendCache) {
+      recommendCache = { ...recommendCache, batch: nextBatch, usedIndices: used };
+    }
   }, [recommendedSongs, usedIndices]);
 
   /** 点播契约（#697/#D2）：页面建立当前展示队列与下标，SongList 自身不写 playerStore。 */
@@ -108,7 +152,7 @@ const RecommendPage: React.FC = () => {
           <div className="rec__state" role="alert">
             <div className="rec__state-title">推荐加载失败</div>
             <div className="rec__state-text">{error}</div>
-            <Button onClick={fetchRecommended}>重试</Button>
+            <Button onClick={() => void fetchRecommended()}>重试</Button>
           </div>
         ) : (
           <>
