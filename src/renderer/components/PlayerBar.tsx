@@ -11,6 +11,10 @@ import PlayerProgress from './PlayerProgress';
 import PlayerVolume from './PlayerVolume';
 import { Menu } from '@/renderer/ui';
 import type { MenuItem } from '@/renderer/ui';
+import {
+  toggleFloatingLyrics,
+  useFloatingLyricsEnabled,
+} from '@/renderer/services/lyricOverlay';
 import '@/renderer/styles/player-bar.css';
 
 interface PlayerBarProps {
@@ -45,6 +49,7 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
   const [moreOpen, setMoreOpen] = useState(false);
   const moreTriggerRef = useRef<HTMLButtonElement>(null);
   const { download } = useDownload();
+  const floatingLyricsEnabled = useFloatingLyricsEnabled();
 
   const handlePlayPause = useCallback(() => {
     if (!currentSong) return;
@@ -149,8 +154,17 @@ const PlayerBar: React.FC<PlayerBarProps> = ({ className, onCoverClick, onQueueC
         <PlayerProgress hasCurrentSong={!!currentSong} onSeek={seek} />
       </div>
 
-      {/* 右 - 队列 / 更多 / 音量 */}
+      {/* 右 - 悬浮歌词 / 队列 / 更多 / 音量 */}
       <div className="player-bar__actions">
+        <button
+          type="button"
+          onClick={toggleFloatingLyrics}
+          aria-label="悬浮歌词"
+          aria-pressed={floatingLyricsEnabled}
+          className="player-btn player-bar__lyrics-toggle"
+        >
+          词
+        </button>
         <button
           type="button"
           onClick={handleQueue}

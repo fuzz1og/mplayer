@@ -20,6 +20,7 @@ import UpdateReadyDialog from '@/renderer/components/UpdateReadyDialog';
 import LyricsPage from '@/renderer/pages/LyricsPage';
 import ErrorBoundary from '@/renderer/components/ErrorBoundary';
 import { initAppearancePrefs } from '@/renderer/theme/appearancePrefs';
+import { startLyricOverlaySync } from '@/renderer/services/lyricOverlay';
 
 import './styles/app-shell.css';
 
@@ -119,6 +120,9 @@ const App: React.FC = () => {
   // 组件挂载时加载收藏列表
   // 外观偏好（密度/材质/字号/动效/歌词字号）落 <html data-*>：冷启动就应用，不必进设置页
   useEffect(() => { void initAppearancePrefs(); }, []);
+
+  // 悬浮歌词：主窗渲染层是唯一状态源，进入 App 即接快照推送（#766）
+  useEffect(() => startLyricOverlaySync(), []);
 
   useEffect(() => {
     loadFavorites();

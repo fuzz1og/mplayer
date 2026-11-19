@@ -2,13 +2,15 @@
  * 外观偏好走 localStorage（仅渲染层），以 html[data-*] 生效；Token 覆盖在 global.css。
  * 主题仍以主进程 db（ThemeManager）为事实源，这里只镜像 theme 字段。
  */
+import type { LyricsSize } from '@/shared/lyricOverlay';
+
 export const APPEARANCE_STORAGE_KEY = 'mplayer.appearance';
 
 export type Density = 'standard' | 'compact';
 export type Material = 'on' | 'off';
 export type FontScale = 'small' | 'standard' | 'large';
 export type Motion = 'on' | 'off';
-export type LyricsSize = 'standard' | 'large';
+export type { LyricsSize };
 
 export interface AppearancePrefs {
   density: Density;

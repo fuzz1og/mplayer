@@ -868,7 +868,8 @@ export const usePlayerStore = create<PlayerStore>((set, get) => ({
     });
 
     if (currentSong?.id === originalId) {
-      set({ currentSong: swapped });
+      // 换源是切歌：旧词必须同拍清掉，覆盖层不能在新歌 id 下短暂显示上一首的歌词（#764）
+      set({ currentSong: swapped, lyrics: '' });
       await get().play(swapped);
     }
   },
